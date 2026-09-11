@@ -12,6 +12,10 @@
 
 ## 실행 방법
 
+**Windows 에서 가장 쉬운 방법**: `곽봇 실행.bat` 더블클릭 → 서버가 켜지고 브라우저가 자동으로 열림. 창을 닫으면 종료.
+
+처음 한 번은 아래 설치가 필요:
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate        # Windows
