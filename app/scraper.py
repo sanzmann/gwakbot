@@ -133,12 +133,14 @@ def refresh_all() -> dict:
     """모든 자동 수집 자료를 갱신하고 결과 요약을 돌려준다."""
     now = datetime.now()
     boards = fetch_all_boards()
-    (DATA_DIR / "auto_notices.md").write_text(render_notices(boards, now), encoding="utf-8")
+    (DATA_DIR / "auto_notices.md").write_text(render_notices(boards, now), encoding="utf-8", newline="
+")
 
     cal_ok = True
     try:
         cal = fetch_calendar(now.year, now.month)
-        (DATA_DIR / "auto_calendar.md").write_text(render_calendar(cal, now.year, now), encoding="utf-8")
+        (DATA_DIR / "auto_calendar.md").write_text(render_calendar(cal, now.year, now), encoding="utf-8", newline="
+")
     except Exception as e:
         log.warning("학사일정 수집 실패: %s", e)
         cal_ok = False
