@@ -21,7 +21,7 @@ class LLMError(Exception):
 
 # ---------------------------------------------------------------- Groq
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 
 async def _stream_groq(system: str, messages: Messages) -> AsyncIterator[str]:

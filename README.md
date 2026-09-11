@@ -32,7 +32,7 @@ DEVLOG.md       개발 일지
 ```
 
 ## LLM 백엔드 바꾸기
-`.env` 의 `LLM_PROVIDER` 를 `groq` 또는 `claude` 로 바꾸면 됩니다. 기본은 무료인 Groq(`llama-3.3-70b-versatile`).
+`.env` 의 `LLM_PROVIDER` 를 `groq` 또는 `claude` 로 바꾸면 됩니다. 기본은 무료인 Groq(`qwen/qwen3.8-27b`).
 
 ## 지식 추가하기
 `data/` 폴더에 `.md` 파일을 추가하면 됩니다. 파일명 순으로 읽히며 서버 재시작 없이 다음 요청부터 반영됩니다.
