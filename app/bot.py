@@ -21,14 +21,14 @@ SYSTEM_PROMPT = """당신은 '곽봇'입니다. 서울과학기술대학교(서�
 </knowledge>"""
 
 
-def build_system(query: str) -> str:
+def build_system(query: str, prev_query: str = "") -> str:
     """질문과 관련된 자료만 골라 넣은 시스템 프롬프트 (Groq 무료 티어 토큰 한도 대응)."""
-    return SYSTEM_PROMPT.format(knowledge=select_context(query), today=date.today().isoformat())
+    return SYSTEM_PROMPT.format(knowledge=select_context(query, prev_query), today=date.today().isoformat())
 
 
 def stream_reply(messages: list[dict]) -> AsyncIterator[str]:
     """대화 기록을 받아 곽봇의 답변을 텍스트 조각 단위로 스트리밍한다."""
-    # 직전 user 메시지도 같이 검색어로 써서 "그건 언제야?" 같은 후속 질문을 받쳐준다
+    # 직전 user 메시지는 "그건 언제야?" 같은 후속 질문을 위해 약한 가중치로만 검색에 반영
     user_turns = [m["content"] for m in messages if m["role"] == "user"]
-    query = " ".join(user_turns[-2:])
-    return stream_completion(build_system(query), messages)
+    prev = user_turns[-2] if len(user_turns) > 1 else ""
+    return stream_completion(build_system(user_turns[-1], prev), messages)

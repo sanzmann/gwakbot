@@ -21,7 +21,27 @@ CONTEXT_BUDGET_CHARS = 4000  # ≈ 2,400 토큰 (한국어 기준 0.6 tok/char)
 _DATE_RE = re.compile(r"(20\d\d)[.\-](\d\d)[.\-](\d\d)")
 _WORD_RE = re.compile(r"[가-힣a-zA-Z0-9]+")
 _URL_IN_HEADING_RE = re.compile(r"\s*\(https?://[^)]*\)")
-META_PREFIXES = ("수집 시각", "출처:", "각 게시판")  # 자동 수집 파일의 머리말은 검색 대상에서 제외
+META_PREFIXES = ("수집 시각", "수집일", "출처:", "각 게시판")  # 수집 파일의 머리말은 검색 대상에서 제외
+
+# 질문에서 떼어낼 조사·어미 (2글자 초과 단어의 끝에서만)
+_PARTICLE_RE = re.compile(r"(에서는|에서도|에서|에게|으로|이랑|한테|까지|부터|이나|이든|에는|에도|에|은|는|이|가|을|를|의|도|로|와|과|랑|야|요)$")
+# 검색에 도움 안 되는 흔한 말
+STOPWORDS = {
+    "학교", "우리", "서울과기대", "과기대", "서울과학기술대학교", "곽봇", "좀", "혹시", "그리고", "근데",
+    "있어", "있나", "있니", "있어요", "있나요", "없어", "어디", "어디야", "어디에", "어딨어", "뭐야", "뭐", "무엇",
+    "언제", "언제야", "어떻게", "어떤", "알려줘", "알려주세요", "궁금해", "해줘", "보여줘", "말해줘", "관련", "대해",
+    "정보", "안내", "질문", "이번", "오늘", "지금", "요즘", "최근", "제일", "가장",
+}
+
+
+def _query_words(query: str) -> list[str]:
+    words = []
+    for w in _WORD_RE.findall(query):
+        if len(w) > 2:
+            w = _PARTICLE_RE.sub("", w)
+        if w and w not in STOPWORDS:
+            words.append(w)
+    return words
 
 
 @dataclass
@@ -91,7 +111,10 @@ def load_chunks() -> list[Chunk]:
     return out
 
 
-def select_context(query: str, budget: int = CONTEXT_BUDGET_CHARS) -> str:
+PREV_WEIGHT = 0.3  # 직전 질문은 후속 질문("그건 언제야?") 보조용이라 약하게만 반영
+
+
+def select_context(query: str, prev_query: str = "", budget: int = CONTEXT_BUDGET_CHARS) -> str:
     """항상 포함 자료 + 질문과 겹치는 조각을 점수·최신순으로 예산만큼 담아 문자열로."""
     parts = []
     for name in ALWAYS_INCLUDE:
@@ -104,10 +127,16 @@ def select_context(query: str, budget: int = CONTEXT_BUDGET_CHARS) -> str:
     # 흔한 바이그램("학기", "안내")은 낮게, 드문 것("장학", "셔틀")은 높게 — 간단한 IDF
     df = Counter(g for gs in grams for g in gs)
     n = len(chunks) or 1
-    q = _bigrams(query)
+    idf = lambda g: math.log(1 + n / df[g]) if g in df else 0.0
+    q = _bigrams(" ".join(_query_words(query)))
+    q_prev = _bigrams(" ".join(_query_words(prev_query))) - q if prev_query else set()
+    # 각 질문의 점수를 0~1 로 정규화해야 긴 직전 질문이 짧은 현재 질문을 덮지 않는다
+    q_total = sum(idf(g) for g in q) or 1.0
+    prev_total = sum(idf(g) for g in q_prev) or 1.0
     scored = []
     for c, gs in zip(chunks, grams):
-        score = sum(math.log(1 + n / df[g]) for g in q & gs)
+        score = sum(idf(g) for g in q & gs) / q_total
+        score += PREV_WEIGHT * sum(idf(g) for g in q_prev & gs) / prev_total
         if score > 0:
             scored.append((score, c.date, c))
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
