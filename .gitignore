@@ -4,3 +4,5 @@ __pycache__/
 .env
 .DS_Store
 .claude/
+# 홈페이지에서 자동 수집한 자료 (서버가 다시 만듦)
+data/auto_*.md

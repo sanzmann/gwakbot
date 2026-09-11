@@ -21,7 +21,9 @@ class LLMError(Exception):
 
 # ---------------------------------------------------------------- Groq
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+# 무료 티어 한도(분당 입력 토큰 ~7,000)는 모델별로 따로 걸리므로, 한 모델이 막히면 다음 모델로 넘긴다.
+GROQ_MODELS = [m.strip() for m in os.getenv("GROQ_MODELS", "qwen/qwen3.8-27b,openai/gpt-oss-120b,openai/gpt-oss-20b").split(",") if m.strip()]
+GROQ_MODEL = GROQ_MODELS[0]
 
 
 async def _stream_groq(system: str, messages: Messages) -> AsyncIterator[str]:
@@ -32,26 +34,32 @@ async def _stream_groq(system: str, messages: Messages) -> AsyncIterator[str]:
         raise LLMError("GROQ_API_KEY 가 설정되지 않았습니다. .env 파일을 확인해주세요.")
 
     client = groq.AsyncGroq(api_key=api_key)
-    try:
-        stream = await client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "system", "content": system}, *messages],
-            max_tokens=1024,
-            temperature=0.3,
-            stream=True,
-        )
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content if chunk.choices else None
-            if delta:
-                yield delta
-    except groq.AuthenticationError:
-        raise LLMError("Groq API 키가 올바르지 않습니다.")
-    except groq.RateLimitError:
-        raise LLMError("지금 요청이 몰려서 잠시 쉬고 있어요. 1분 뒤에 다시 물어봐주세요.")
-    except groq.APIStatusError as e:
-        raise LLMError(f"Groq API 오류 ({e.status_code})")
-    except groq.APIConnectionError:
-        raise LLMError("네트워크 연결에 실패했습니다.")
+    for i, model in enumerate(GROQ_MODELS):
+        last = i == len(GROQ_MODELS) - 1
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "system", "content": system}, *messages],
+                max_tokens=1024,
+                temperature=0.3,
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    yield delta
+            return
+        except groq.AuthenticationError:
+            raise LLMError("Groq API 키가 올바르지 않습니다.")
+        except groq.RateLimitError:
+            if last:
+                raise LLMError("지금 요청이 몰려서 잠시 쉬고 있어요. 1분 뒤에 다시 물어봐주세요.")
+        except groq.APIStatusError as e:
+            if e.status_code == 413 and not last:  # 이 모델의 분당 토큰 한도 초과 → 다음 모델
+                continue
+            raise LLMError(f"Groq API 오류 ({e.status_code})")
+        except groq.APIConnectionError:
+            raise LLMError("네트워크 연결에 실패했습니다.")
 
 
 # ---------------------------------------------------------------- Claude
@@ -103,5 +111,5 @@ def stream_completion(system: str, messages: Messages) -> AsyncIterator[str]:
 
 def describe() -> str:
     """현재 어떤 백엔드/모델을 쓰는지 (로그·헬스체크용)."""
-    model = GROQ_MODEL if PROVIDER == "groq" else CLAUDE_MODEL
+    model = "|".join(GROQ_MODELS) if PROVIDER == "groq" else CLAUDE_MODEL
     return f"{PROVIDER}:{model}"

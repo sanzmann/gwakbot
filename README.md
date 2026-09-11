@@ -4,8 +4,10 @@
 
 ## 기능
 - 학교 정보(위치, 교통, 단과대학, 문의처 등) Q&A
+- 학교 홈페이지 공지사항(일반/학사/장학/취업)·학사일정 자동 수집 (서버 시작 시 + 6시간마다)
+- 질문과 관련된 자료만 골라 LLM 에 전달 (바이그램+IDF 검색) — 무료 티어 토큰 한도 대응
 - `data/*.md` 에 적은 자료를 지식 베이스로 사용 (파일 추가만 하면 학습 없이 반영)
-- 웹 채팅 UI, 답변 실시간 스트리밍
+- 웹 채팅 UI, 답변 실시간 스트리밍, 마크다운 렌더링
 
 ## 실행 방법
 
@@ -24,9 +26,10 @@ uvicorn app.main:app --reload
 app/
   main.py       FastAPI 서버, /api/chat SSE 스트리밍
   bot.py        시스템 프롬프트 구성
-  providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환
-  knowledge.py  data/*.md 로더
-data/           학교 정보 마크다운 (지식 베이스)
+  providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환, Groq 모델 폴백
+  retrieval.py  질문 관련 자료 검색 (바이그램 + IDF)
+  scraper.py    홈페이지 공지·학사일정 수집 → data/auto_*.md  (수동: python -m app.scraper)
+data/           학교 정보 마크다운 (지식 베이스). auto_*.md 는 자동 생성
 static/         채팅 UI
 DEVLOG.md       개발 일지
 ```
