@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -18,8 +19,14 @@ from bs4 import BeautifulSoup
 BASE = "https://www.seoultech.ac.kr"
 AJAX = f"{BASE}/site/www/intro/map/"
 MAP_URL = f"{BASE}/intro/map/"
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "data"
 OUT = DATA_DIR / "14_campus_map.md"
+# 채팅 화면이 지도를 그릴 때 쓰는 좌표 파일. 지도 이미지는 학교 서버 것을 그대로 링크한다
+# (CORS 허용됨 — 복사본을 저장소에 두지 않아 항상 최신이고 재배포 문제도 없음)
+MARKERS_OUT = ROOT / "static" / "campus_buildings.json"
+MAP_IMAGE = f"{BASE}/common/images/campusmap/map_summer.jpg"
+MAP_W, MAP_H = 900, 582  # 마커 좌표가 이 크기 기준
 HEADERS = {"User-Agent": "Mozilla/5.0 (kwakbot; +https://github.com/sanzmann/gwakbot)", "Referer": MAP_URL}
 
 TABS = ["대학", "대학원", "복지시설", "행정지원"]
@@ -40,15 +47,26 @@ def _get_session() -> requests.Session:
     return s
 
 
+_POS_RE = re.compile(r"left:\s*(\d+)px;\s*top:\s*(\d+)px")
+
+
 def fetch_tab(s: requests.Session, name: str) -> list[tuple[str, str, str]]:
     """탭의 마커 목록 → [(건물id, 번호, 라벨)]"""
+    return [(bid, num, label) for bid, num, label, _, _ in fetch_tab_full(s, name)]
+
+
+def fetch_tab_full(s: requests.Session, name: str) -> list[tuple[str, str, str, int, int]]:
+    """탭의 마커 목록 → [(건물id, 번호, 라벨, x, y)]. 좌표는 지도 이미지(900x582) 기준 핀 중심."""
     soup = BeautifulSoup(s.post(AJAX + "map_ajax.jsp", data={"building": name}, timeout=15).text, "lxml")
     out = []
     for a in soup.select("a.popup"):
         m = re.search(r"id=(\d+)", a.get("href", ""))
         img, badge = a.find("img"), a.find("span")
-        if m and img:
-            out.append((m.group(1), badge.get_text(strip=True) if badge else "", img["alt"].strip()))
+        if not (m and img):
+            continue
+        pos = _POS_RE.search((badge or img).get("style", ""))
+        x, y = (int(pos.group(1)) + 10, int(pos.group(2)) + 10) if pos else (0, 0)
+        out.append((m.group(1), badge.get_text(strip=True) if badge else "", img["alt"].strip(), x, y))
     return out
 
 
@@ -73,8 +91,12 @@ def fetch_building(s: requests.Session, bid: str) -> tuple[list[str], list[tuple
 def refresh_campus_map() -> dict:
     s = _get_session()
     buildings: dict[str, tuple[str, str]] = {}  # id -> (번호, 이름)
-    for bid, num, name in fetch_tab(s, "건물별"):
-        buildings.setdefault(bid, (num, name))
+    markers: list[dict] = []
+    for bid, num, name, x, y in fetch_tab_full(s, "건물별"):
+        if bid in buildings:
+            continue
+        buildings[bid] = (num, name)
+        markers.append({"num": num, "name": name, "x": x, "y": y})
 
     # 시설/부서 → 건물 (탭 정보)
     facilities: list[tuple[str, str, str]] = []  # (탭, 시설명, 건물표기)
@@ -109,7 +131,20 @@ def refresh_campus_map() -> dict:
         lines.append(f"- {label} ({tab}): {where}")
 
     OUT.write_text("\n".join(lines + details) + "\n", encoding="utf-8", newline="\n")
-    return {"buildings": len(buildings), "facilities": len(facilities), "rooms": kept_rooms}
+
+    # 시설명으로도 건물을 찾을 수 있게 별칭 추가 (예: "도서관" -> 34번)
+    aliases: dict[str, str] = {}
+    for _, label, where in facilities:
+        m = re.search(r"\((\d+)번\)$", where)
+        if m:
+            aliases.setdefault(label, m.group(1))
+    MARKERS_OUT.write_text(json.dumps({
+        "image": MAP_IMAGE, "width": MAP_W, "height": MAP_H, "page": MAP_URL,
+        "buildings": markers, "aliases": aliases,
+    }, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+
+    return {"buildings": len(buildings), "facilities": len(facilities), "rooms": kept_rooms,
+            "markers": len(markers), "aliases": len(aliases)}
 
 
 if __name__ == "__main__":
