@@ -1,6 +1,6 @@
 # 재수강
 - 출처: https://www.seoultech.ac.kr/life/info/college/relearning
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 ### 재수강 교과목
 기존에 수강한 교과목과 교과목코드가 동일한 교과목

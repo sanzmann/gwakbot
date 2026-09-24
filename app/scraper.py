@@ -13,6 +13,8 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from .menu import refresh_menu
+
 log = logging.getLogger("kwakbot.scraper")
 
 BASE = "https://www.seoultech.ac.kr"
@@ -98,11 +100,14 @@ def render_notices(boards: dict[str, list[dict]], fetched_at: datetime) -> str:
 
 # ------------------------------------------------------------- 학사일정
 
-def fetch_calendar(year: int, month: int) -> dict[str, list[tuple[str, str]]]:
+CALENDARS = {"학부": "/life/sch/common/", "대학원": "/life/sch/grad/"}
+
+
+def fetch_calendar(year: int, month: int, path: str = "/life/sch/common/") -> dict[str, list[tuple[str, str]]]:
     """typ=2: 1학기 전체, typ=3: 2학기 전체. (날짜, 내용) 목록."""
     out = {}
     for label, typ in (("1학기", 2), ("2학기", 3)):
-        soup = _get(f"{BASE}/life/sch/common/?year={year}&mon={month}&typ={typ}")
+        soup = _get(f"{BASE}{path}?year={year}&mon={month}&typ={typ}")
         rows = []
         for tr in soup.select("table.schedule tbody tr"):
             tds = tr.find_all("td")
@@ -112,18 +117,20 @@ def fetch_calendar(year: int, month: int) -> dict[str, list[tuple[str, str]]]:
     return out
 
 
-def render_calendar(cal: dict[str, list[tuple[str, str]]], year: int, fetched_at: datetime) -> str:
+def render_calendar(cals: dict[str, dict[str, list[tuple[str, str]]]], year: int, fetched_at: datetime) -> str:
     lines = [
-        f"# {year}학년도 학부 학사일정 (학교 홈페이지 자동 수집)",
+        f"# {year}학년도 학사일정 (학교 홈페이지 자동 수집)",
         f"- 수집 시각: {fetched_at:%Y-%m-%d %H:%M}",
-        f"- 출처: {BASE}/life/sch/common/",
+        f"- 학부 출처: {BASE}{CALENDARS['학부']} / 대학원 출처: {BASE}{CALENDARS['대학원']}",
+        "- 중간고사·기말고사 날짜는 공식 학사일정에 없음 (과목별 강의계획서 확인)",
         "",
     ]
-    for label, rows in cal.items():
-        lines.append(f"## {label}")
-        for date, text in rows:
-            lines.append(f"- {date}: {text}")
-        lines.append("")
+    for who, cal in cals.items():
+        for label, rows in cal.items():
+            lines.append(f"## {who} {label}")
+            for date, text in rows:
+                lines.append(f"- [{who}] {date}: {text}")
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -135,19 +142,25 @@ def refresh_all() -> dict:
     boards = fetch_all_boards()
     (DATA_DIR / "auto_notices.md").write_text(render_notices(boards, now), encoding="utf-8", newline="\n")
 
-    cal_ok = True
-    try:
-        cal = fetch_calendar(now.year, now.month)
-        (DATA_DIR / "auto_calendar.md").write_text(render_calendar(cal, now.year, now), encoding="utf-8", newline="\n")
-    except Exception as e:
-        log.warning("학사일정 수집 실패: %s", e)
-        cal_ok = False
+    cals = {}
+    for who, path in CALENDARS.items():
+        try:
+            cals[who] = fetch_calendar(now.year, now.month, path)
+        except Exception as e:  # 한쪽이 실패해도 나머지는 저장
+            log.warning("%s 학사일정 수집 실패: %s", who, e)
+    if cals:
+        (DATA_DIR / "auto_calendar.md").write_text(render_calendar(cals, now.year, now), encoding="utf-8", newline="\n")
 
     summary = {
         "fetched_at": now.isoformat(timespec="minutes"),
         "notices": {k: len(v) for k, v in boards.items()},
-        "calendar": cal_ok,
+        "calendar": sorted(cals),
     }
+    try:
+        summary["menu"] = refresh_menu()
+    except Exception as e:  # 식단 사이트가 죽어도 나머지는 유지
+        log.warning("식단 수집 실패: %s", e)
+        summary["menu"] = None
     log.info("자동 수집 완료: %s", summary)
     return summary
 

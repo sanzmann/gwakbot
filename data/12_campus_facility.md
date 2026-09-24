@@ -1,6 +1,6 @@
 # 편의시설 정보
 - 출처: https://www.seoultech.ac.kr/life/student/welfare/info
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 - 편의시설정보
 - 체육관

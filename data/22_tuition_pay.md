@@ -1,6 +1,6 @@
 # 등록금 납부 안내
 - 출처: https://www.seoultech.ac.kr/life/tution/paiement
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 - 통합정보시스템 조회 ( http://suis.seoultech.ac.kr )
 - 통합정보시스템 로그인 ⇨ 학사 ⇨ 등록 ⇨ 등록금고지서 조회

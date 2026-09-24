@@ -4,7 +4,8 @@
 
 ## 기능
 - 학교 정보(위치, 교통, 단과대학, 문의처 등) Q&A
-- 학교 홈페이지 공지사항(일반/학사/장학/취업)·학사일정 자동 수집 (서버 시작 시 + 6시간마다)
+- 학교 홈페이지 공지사항(일반/학사/장학/취업)·학사일정(학부+대학원)·식단 자동 수집 (서버 시작 시 + 6시간마다)
+- 식단: 생활관 식당 주간 식단표·이용시간, 교내 식당(ST:Table/ST:Dining) 메뉴·가격
 - 학사안내·교통·전화번호·시설·장학·등록금 등 정적 안내 페이지 37개 수집 (`python -m app.pages`)
 - 캠퍼스 지도의 건물 43개·주요 호실 500여 개 (학과 사무실, 식당, 은행 등 위치) (`python -m app.campus_map`)
 - 위치를 묻는 답변에는 **핀 찍힌 캠퍼스 지도 이미지**를 함께 표시 (클릭하면 크게)
@@ -35,7 +36,8 @@ app/
   bot.py        시스템 프롬프트 구성
   providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환, Groq 모델 폴백
   retrieval.py  질문 관련 자료 검색 (바이그램 + IDF)
-  scraper.py    홈페이지 공지·학사일정 수집 → data/auto_*.md  (수동: python -m app.scraper)
+  scraper.py    공지·학사일정 수집 → data/auto_*.md  (수동: python -m app.scraper, 식단도 함께 갱신)
+  menu.py       생활관 식단표 + 교내 식당 메뉴 → data/auto_menu.md  (수동: python -m app.menu)
   pages.py      홈페이지 정적 안내 페이지 → data/NN_*.md  (수동: python -m app.pages, 결과는 깃에 커밋)
   campus_map.py 캠퍼스지도의 건물·시설·호실 → data/14_campus_map.md + static/campus_buildings.json(핀 좌표)
 data/           학교 정보 마크다운 (지식 베이스). auto_*.md 는 자동 생성

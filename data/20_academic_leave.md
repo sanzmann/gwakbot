@@ -1,6 +1,6 @@
 # 제적/자퇴
 - 출처: https://www.seoultech.ac.kr/life/info/college/leave
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 제적 대상자
 

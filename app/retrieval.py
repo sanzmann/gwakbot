@@ -10,6 +10,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -34,6 +35,43 @@ STOPWORDS = {
 }
 
 
+# "오늘 점심 뭐야?" 처럼 상대적 날짜로 묻는 질문을, 자료에 적힌 날짜 표기로 바꿔 준다
+_WEEKDAYS = "월화수목금토일"
+_RELATIVE_DAYS = {"오늘": 0, "금일": 0, "내일": 1, "낼": 1, "모레": 2, "어제": -1}
+
+
+def _expand_dates(query: str, today: date | None = None) -> str:
+    today = today or date.today()
+    extra = []
+    for word, delta in _RELATIVE_DAYS.items():
+        if word in query:
+            d = today + timedelta(days=delta)
+            extra += [f"{d.day}일", _WEEKDAYS[d.weekday()], f"{d.month}월", d.strftime("%Y-%m-%d")]
+    if "이번주" in query or "이번 주" in query:
+        extra.append(f"{today.month}월")
+    return query + (" " + " ".join(extra) if extra else "")
+
+
+# 학생이 쓰는 말과 학교 자료의 표기가 다를 때 검색어에 함께 넣어 준다
+SYNONYMS = {
+    "기숙사": "생활관", "생활관": "기숙사",
+    "아침": "조식", "점심": "중식", "저녁": "석식",
+    "조식": "아침", "중식": "점심", "석식": "저녁",
+    "식당": "식단", "밥": "식단 식당", "메뉴": "식단",
+    "등록금": "등록 납부", "수업료": "등록금",
+    "빌려": "대출", "빌리": "대출",
+    "휴학": "휴학 복학", "자퇴": "제적 자퇴",
+}
+
+
+def _expand_synonyms(words: list[str]) -> list[str]:
+    out = list(words)
+    for w in words:
+        if w in SYNONYMS:
+            out += SYNONYMS[w].split()
+    return out
+
+
 def _query_words(query: str) -> list[str]:
     words = []
     for w in _WORD_RE.findall(query):
@@ -41,7 +79,7 @@ def _query_words(query: str) -> list[str]:
             w = _PARTICLE_RE.sub("", w)
         if w and w not in STOPWORDS:
             words.append(w)
-    return words
+    return _expand_synonyms(words)
 
 
 @dataclass
@@ -128,8 +166,8 @@ def select_context(query: str, prev_query: str = "", budget: int = CONTEXT_BUDGE
     df = Counter(g for gs in grams for g in gs)
     n = len(chunks) or 1
     idf = lambda g: math.log(1 + n / df[g]) if g in df else 0.0
-    q = _bigrams(" ".join(_query_words(query)))
-    q_prev = _bigrams(" ".join(_query_words(prev_query))) - q if prev_query else set()
+    q = _bigrams(" ".join(_query_words(_expand_dates(query))))
+    q_prev = _bigrams(" ".join(_query_words(_expand_dates(prev_query)))) - q if prev_query else set()
     # 각 질문의 점수를 0~1 로 정규화해야 긴 직전 질문이 짧은 현재 질문을 덮지 않는다
     q_total = sum(idf(g) for g in q) or 1.0
     prev_total = sum(idf(g) for g in q_prev) or 1.0

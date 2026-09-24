@@ -1,6 +1,6 @@
 # 보건진료소
 - 출처: https://www.seoultech.ac.kr/life/attatched/clinic
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 - 기관명: 보건진료소
 - 영문표기: Health Service Center

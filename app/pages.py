@@ -42,7 +42,7 @@ PAGES = [
     ("20_academic_attendance", "출석인정", "/life/info/college/attendance"),
     ("20_academic_exchange", "국내 타 대학 학점교류", "/life/info/college/exchange"),
     ("20_academic_multimajor", "다전공 (복수·부전공 등)", "/life/info/college/multimajor"),
-    ("21_scholarship", "장학제도 안내", "/life/scholarship/janghag"),
+    ("21_scholarship", "장학제도 안내 (교내·국가·교외 장학금 목록)", "/life/scholarship/janghag"),
     ("22_tuition_info", "등록 안내", "/life/tution/infotution"),
     ("22_tuition_pay", "등록금 납부 안내", "/life/tution/paiement"),
     ("22_tuition_divide", "등록금 분할납부 안내", "/life/tution/dividpay"),
@@ -112,6 +112,28 @@ def _to_markdown(root: Tag) -> str:
     return md.strip()
 
 
+def _scholarship_markdown(root: Tag) -> str:
+    """장학제도안내는 목록만 HTML 이고 상세는 .hwp 첨부라, 분류별 목록 + 파일명을 남긴다."""
+    lines = []
+    for cat in root.select("div.janghag div.m1"):
+        name = _clean(cat.get_text(" ", strip=True))
+        ul = cat.find_next_sibling("ul")
+        if not (name and ul):
+            continue
+        lines.append(f"\n## {name}")
+        for li in ul.find_all("li", recursive=False):
+            title = _clean(li.get_text(" ", strip=True))
+            a = li.find("a", href=True)
+            m = re.search(r"fileDown\('[^']*','[^']*','([^']*)'", a["href"]) if a else None
+            if title:
+                lines.append(f"- {name} - {title}" + (f" (상세: 첨부파일 {m.group(1)})" if m else ""))
+    if lines:
+        lines.append("\n- 각 장학금의 지급 기준·신청 방법은 위 페이지의 한글(.hwp) 첨부파일에 있음. "
+                     "자격 조건은 '맞춤형장학조회'(https://www.seoultech.ac.kr/life/scholarship/lookup/) 에서 확인 가능")
+        lines.append("- 학기별 신청 일정은 장학공지 게시판(https://www.seoultech.ac.kr/service/info/janghak/) 참고")
+    return "\n".join(lines).strip()
+
+
 def fetch_page(path: str) -> str:
     r = requests.get(BASE + path, headers=HEADERS, timeout=15)
     r.raise_for_status()
@@ -120,6 +142,8 @@ def fetch_page(path: str) -> str:
     for sel in NOISE_SELECTORS:
         for el in root.select(sel):
             el.decompose()
+    if root.select_one("div.janghag div.m1"):
+        return _scholarship_markdown(root)
     # 학사안내류 상단의 형제 페이지 링크 목록 (링크만 잔뜩 있는 ul) 제거
     for ul in root.find_all("ul"):
         lis = ul.find_all("li", recursive=False)

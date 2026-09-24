@@ -1,6 +1,6 @@
 # 도서관
 - 출처: https://www.seoultech.ac.kr/life/support/library
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 - 기관명: 서울과학기술대학교 도서관
 - 영문표기: Seoul National University of Science and Technology Library

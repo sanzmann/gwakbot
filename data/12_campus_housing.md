@@ -1,6 +1,6 @@
 # 생활관 (기숙사)
 - 출처: https://www.seoultech.ac.kr/life/support/housing
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 - 기관명: 생활관
 - 영문표기: SeoulTech Housing

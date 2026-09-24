@@ -1,6 +1,6 @@
 # 주차 안내
 - 출처: https://www.seoultech.ac.kr/intro/campinfo/parking
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 ### 담당부서
 대학본부 2층 202호 주차사무실 (Tel : 970 – 6087)

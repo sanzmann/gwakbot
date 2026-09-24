@@ -107,9 +107,15 @@ const history = [];
 let MAP = null;
 fetch('/static/campus_buildings.json').then(r => r.ok ? r.json() : null).then(d => { MAP = d; }).catch(() => {});
 
+// 위치를 묻는 질문인지 (아니면 지도를 띄우지 않는다)
+const LOCATION_Q = /어디|위치|어딨|찾아가|가는\s*법|건물|호실|몇\s*층|지도|캠퍼스/;
+
 // 답변에 언급된 건물 찾기: 건물명과 시설 별칭을 긴 것부터, 그 다음 "NN번"
-function findBuildings(text) {
+function findBuildings(text, question) {
   if (!MAP) return [];
+  // 답변이 건물 번호를 명시했거나(예: "미래관(60번)"), 애초에 위치를 물은 경우에만 지도를 붙인다
+  const hasBuildingNo = /\d{1,2}\s*번/.test(text);
+  if (!hasBuildingNo && !(question && LOCATION_Q.test(question))) return [];
   const byNum = new Map(MAP.buildings.map(b => [b.num, b]));
   const found = new Map();
   const names = MAP.buildings.map(b => [b.name, b.num])
@@ -247,7 +253,7 @@ form.addEventListener('submit', async (e) => {
     }
     if (reply) {
       history.push({ role: 'assistant', content: reply });
-      const pins = findBuildings(reply);
+      const pins = findBuildings(reply, text);
       if (pins.length) {
         botEl.appendChild(buildMapBox(pins));
         chat.scrollTop = chat.scrollHeight;

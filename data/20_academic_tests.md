@@ -1,6 +1,6 @@
 # 시험과 성적
 - 출처: https://www.seoultech.ac.kr/life/info/college/tests
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 ### 시험
 시험 중 부정행위자 처리

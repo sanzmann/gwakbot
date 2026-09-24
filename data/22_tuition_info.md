@@ -1,6 +1,6 @@
 # 등록 안내
 - 출처: https://www.seoultech.ac.kr/life/tution/infotution
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 - 1학기 2월 중
 - 2학기 8월 중 ※ 세부일정은 매 학기 개시 전 홈페이지 공지

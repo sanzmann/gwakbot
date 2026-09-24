@@ -1,6 +1,6 @@
 # 예비군 안내
 - 출처: https://www.seoultech.ac.kr/life/military/reserve
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 ### 대학직장 예비군 편성 대상자
 - 대학에 재학 중인 학생 중 예비군

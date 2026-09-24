@@ -1,6 +1,6 @@
 # 출석인정
 - 출처: https://www.seoultech.ac.kr/life/info/college/attendance
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 ### 출석인정 사유 및 기간
 - 출석인정사유 | 기간

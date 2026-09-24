@@ -1,6 +1,6 @@
 # 오시는 길 (교통)
 - 출처: https://www.seoultech.ac.kr/intro/campinfo/location
-- 수집일: 2026-09-11
+- 수집일: 2026-09-24
 
 ## 인천국제공항 – 서울과학기술대학교 오시는 길
 
