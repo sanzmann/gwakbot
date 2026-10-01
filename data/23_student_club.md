@@ -1,6 +1,6 @@
 # 동아리
 - 출처: https://www.seoultech.ac.kr/life/student/organ/club
-- 수집일: 2026-09-24
+- 수집일: 2026-10-01
 
 - 학생회
 - 동아리

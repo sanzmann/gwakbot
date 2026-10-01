@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
@@ -29,6 +30,8 @@ BOARDS = {
     "취업공지": f"{BASE}/service/info/job/",
 }
 NOTICES_PER_BOARD = 15
+BODIES_PER_BOARD = 8      # 본문까지 읽어올 최신 글 수 (게시판당)
+MAX_BODY_CHARS = 1200     # 글 하나당 본문 상한
 
 
 def _get(url: str) -> BeautifulSoup:
@@ -69,14 +72,37 @@ def fetch_board(url: str, limit: int = NOTICES_PER_BOARD) -> list[dict]:
     return items[:limit]
 
 
+def fetch_body(url: str) -> str:
+    """공지 상세 페이지의 본문. 표는 ' | ' 로 이어 붙인다."""
+    soup = _get(url)
+    view = soup.select_one("table.tbl_view")
+    if not view:
+        return ""
+    rows = view.select("tr")
+    if not rows:
+        return ""
+    body = rows[-1].find("td")  # 마지막 행이 본문
+    if not body:
+        return ""
+    text = body.get_text(" ", strip=True)
+    return re.sub(r"\s+", " ", text)[:MAX_BODY_CHARS]
+
+
 def fetch_all_boards() -> dict[str, list[dict]]:
     result = {}
     for name, url in BOARDS.items():
         try:
-            result[name] = fetch_board(url)
+            items = fetch_board(url)
         except Exception as e:  # 한 게시판이 죽어도 나머지는 살린다
             log.warning("%s 수집 실패: %s", name, e)
             result[name] = []
+            continue
+        for item in items[:BODIES_PER_BOARD]:
+            try:
+                item["body"] = fetch_body(item["url"])
+            except Exception as e:
+                log.warning("%s 본문 수집 실패: %s", item["title"][:20], e)
+        result[name] = items
     return result
 
 
@@ -84,7 +110,8 @@ def render_notices(boards: dict[str, list[dict]], fetched_at: datetime) -> str:
     lines = [
         "# 최근 공지사항 (학교 홈페이지 자동 수집)",
         f"- 수집 시각: {fetched_at:%Y-%m-%d %H:%M}",
-        "- 각 게시판의 최신 글 제목만 담겨 있음. 자세한 내용은 링크로 안내할 것.",
+        "- 최신 글은 본문 일부까지, 나머지는 제목만 담겨 있음. 답변에는 글 제목·날짜와 함께 링크를 안내할 것.",
+        "- 본문은 잘려 있을 수 있고 첨부파일 내용은 없으므로, 신청 방법·서식은 원문 링크를 함께 안내할 것.",
         "",
     ]
     for name, items in boards.items():
@@ -94,6 +121,8 @@ def render_notices(boards: dict[str, list[dict]], fetched_at: datetime) -> str:
         for it in items:
             mark = "[고정] " if it["pinned"] else ""
             lines.append(f"- {it['date']} | {it['dept']} | {mark}{it['title']} | {it['url']}")
+            if it.get("body"):
+                lines.append(f"  - [{it['title'][:30]}] 본문: {it['body']}")
         lines.append("")
     return "\n".join(lines)
 

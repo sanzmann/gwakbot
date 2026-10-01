@@ -8,6 +8,9 @@
 - 식단: 생활관 식당 주간 식단표·이용시간, 교내 식당(ST:Table/ST:Dining) 메뉴·가격
 - 학사안내·교통·전화번호·시설·장학·등록금 등 정적 안내 페이지 37개 수집 (`python -m app.pages`)
 - 캠퍼스 지도의 건물 43개·주요 호실 500여 개 (학과 사무실, 식당, 은행 등 위치) (`python -m app.campus_map`)
+- 졸업요건 요약(학번별 졸업학점·졸업필수항목), 학과별 교육과정·교과목 개요 (`python -m app.curriculum`)
+- 장학금 상세 — 학교가 한글/PDF 로만 올린 안내문을 파싱 (`python -m app.scholarship`)
+- 공지사항은 제목뿐 아니라 최신 글의 본문 일부까지 수집
 - 위치를 묻는 답변에는 **핀 찍힌 캠퍼스 지도 이미지**를 함께 표시 (클릭하면 크게)
 - 질문과 관련된 자료만 골라 LLM 에 전달 (바이그램+IDF 검색) — 무료 티어 토큰 한도 대응
 - `data/*.md` 에 적은 자료를 지식 베이스로 사용 (파일 추가만 하면 학습 없이 반영)
@@ -38,6 +41,9 @@ app/
   retrieval.py  질문 관련 자료 검색 (바이그램 + IDF)
   scraper.py    공지·학사일정 수집 → data/auto_*.md  (수동: python -m app.scraper, 식단도 함께 갱신)
   menu.py       생활관 식단표 + 교내 식당 메뉴 → data/auto_menu.md  (수동: python -m app.menu)
+  curriculum.py 교육과정 PDF → data/25_curriculum_*.md  (수동, 연 1회면 충분)
+  scholarship.py 장학금 첨부파일 → data/21_scholarship_detail.md  (수동)
+  hwp.py        한글(.hwp/.hwpx)·PDF 본문 추출기
   pages.py      홈페이지 정적 안내 페이지 → data/NN_*.md  (수동: python -m app.pages, 결과는 깃에 커밋)
   campus_map.py 캠퍼스지도의 건물·시설·호실 → data/14_campus_map.md + static/campus_buildings.json(핀 좌표)
 data/           학교 정보 마크다운 (지식 베이스). auto_*.md 는 자동 생성

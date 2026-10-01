@@ -1,6 +1,6 @@
 # 학사경고
 - 출처: https://www.seoultech.ac.kr/life/info/college/caution
-- 수집일: 2026-09-24
+- 수집일: 2026-10-01
 
 ### 학사경고 부과 대상 및 시기
 대상

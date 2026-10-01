@@ -22,7 +22,7 @@ class LLMError(Exception):
 # ---------------------------------------------------------------- Groq
 
 # 무료 티어 한도(분당 입력 토큰 ~7,000)는 모델별로 따로 걸리므로, 한 모델이 막히면 다음 모델로 넘긴다.
-GROQ_MODELS = [m.strip() for m in os.getenv("GROQ_MODELS", "qwen/qwen3.8-27b,openai/gpt-oss-120b,openai/gpt-oss-20b").split(",") if m.strip()]
+GROQ_MODELS = [m.strip() for m in os.getenv("GROQ_MODELS", "openai/gpt-oss-120b,qwen/qwen3.8-27b,openai/gpt-oss-20b").split(",") if m.strip()]
 GROQ_MODEL = GROQ_MODELS[0]
 
 
