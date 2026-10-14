@@ -199,7 +199,7 @@ def refresh_menu() -> dict:
         log.warning("테크노파크 식단 수집 실패: %s", e)
         tp = None
     lines.append("## 테크노파크 구내식당 (서울테크노파크, 7번 건물)")
-    lines.append("- 테크노파크 구내식당은 교내 서울테크노파크(7번 건물)에 있습니다.")
+    lines.append("- 테크노파크 구내식당 위치: 교내 서울테크노파크(7번 건물) 2층 (재학생 제보로 확인)")
     if tp:
         lines.append(f"- 테크노파크 식당 식단표: {tp['title']} ({tp['date']} 게시). "
                      f"주간 식단표가 이미지로 올라와서 메뉴 글자는 자료에 없음 — 보려면 {tp['url']}")
