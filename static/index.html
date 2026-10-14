@@ -185,7 +185,7 @@ const history = [];
 let MAP = null;
 fetch('/static/campus_buildings.json').then(r => r.ok ? r.json() : null).then(d => { MAP = d; }).catch(() => {});
 
-const LOCATION_Q = /어디|위치|어딨|찾아가|가는\s*법|건물|호실|몇\s*층|지도|캠퍼스/;
+const LOCATION_Q = /어디\s*(있|야|에|냐|쯤|인가)|어딨|위치|찾아가|가는\s*법|건물|호실|몇\s*층|지도|캠퍼스/;
 
 function findBuildings(text, question) {
   if (!MAP) return [];
@@ -271,9 +271,36 @@ dlg.querySelector('.close').addEventListener('click', () => dlg.close());
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 
 // ---- 말풍선 ----
+// 자동 링크가 뒤따르는 한글 조사나 닫는 괄호까지 삼키는 문제를 바로잡는다.
+// 예: "(https://www.seoultech.ac.kr)에서" → 링크에 ")에서" 가 포함돼 주소가 깨짐
+const LINK_TAIL = /[가-힣ㄱ-ㅎㅏ-ㅣ)\]}>,.;:!?'"」』]+$/;
+
+function trimAutoLinks(root) {
+  for (const a of root.querySelectorAll('a[href]')) {
+    let href = a.getAttribute('href');
+    let decoded;
+    try { decoded = decodeURI(href); } catch { continue; }
+    // [텍스트](주소) 형태는 손대지 않는다 — 글자가 그대로 드러난 자동 링크만 다듬는다
+    if (a.textContent !== decoded && a.textContent !== href) continue;
+    const tail = (decoded.match(LINK_TAIL) || [''])[0];
+    if (!tail) continue;
+    const clean = decoded.slice(0, decoded.length - tail.length);
+    if (!/^https?:\/\/[^/]+/.test(clean)) continue;
+    a.setAttribute('href', clean);
+    a.textContent = clean;
+    a.after(document.createTextNode(tail));
+  }
+}
+
 function renderMd(text) {
-  const html = DOMPurify.sanitize(window.marked.parse(text, { breaks: true }));
-  return html.replace(/<a /g, '<a target="_blank" rel="noopener" ');
+  const holder = document.createElement('div');
+  holder.innerHTML = DOMPurify.sanitize(window.marked.parse(text, { breaks: true }));
+  trimAutoLinks(holder);
+  for (const a of holder.querySelectorAll('a')) {
+    a.target = '_blank';
+    a.rel = 'noopener';
+  }
+  return holder.innerHTML;
 }
 
 function addRow(role) {
