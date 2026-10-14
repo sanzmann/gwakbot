@@ -51,6 +51,9 @@ static/         채팅 UI (img/ 에 마스코트 이미지)
 DEVLOG.md       개발 일지
 ```
 
+## 성격 바꾸기
+`persona.md` 를 고치면 이름·말투·설정이 바뀝니다 (서버 재시작 필요). 코드는 건드리지 않아도 됩니다.
+
 ## LLM 백엔드 바꾸기
 `.env` 의 `LLM_PROVIDER` 를 `groq` 또는 `claude` 로 바꾸면 됩니다. 기본은 무료인 Groq(`qwen/qwen3.8-27b`).
 

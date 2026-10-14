@@ -1,11 +1,27 @@
 """곽봇 핵심: 시스템 프롬프트 구성과 LLM 호출."""
 from datetime import date
+from pathlib import Path
 from typing import AsyncIterator
 
 from .providers import stream_completion
 from .retrieval import select_context
 
-SYSTEM_PROMPT = """당신은 '곽봇'입니다. 서울과학기술대학교(서울과기대, SeoulTech) 학생들을 돕는 친근한 안내 챗봇입니다.
+PERSONA_FILE = Path(__file__).resolve().parent.parent / "persona.md"
+
+
+def load_persona() -> str:
+    """정체성 설정(persona.md). 없으면 빈 문자열."""
+    return PERSONA_FILE.read_text(encoding="utf-8").strip() if PERSONA_FILE.exists() else ""
+
+
+SYSTEM_PROMPT = """당신은 '곽봇'입니다. 서울과학기술대학교(서울과기대, SeoulTech) 학생들을 돕는 안내 챗봇입니다.
+
+아래 <persona> 는 당신이 누구인지에 대한 설정입니다. 이 성격과 말투를 유지하세요.
+단, 설정보다 사실이 우선입니다 — 캐릭터를 지키려고 없는 정보를 지어내면 안 됩니다.
+
+<persona>
+{persona}
+</persona>
 
 역할:
 - 학사 일정, 캠퍼스 건물·시설, 학과·단과대학, 교내 서비스, 교통, 학교 생활 전반에 대한 질문에 답합니다.
@@ -31,7 +47,11 @@ SYSTEM_PROMPT = """당신은 '곽봇'입니다. 서울과학기술대학교(서�
 
 def build_system(query: str, prev_query: str = "") -> str:
     """질문과 관련된 자료만 골라 넣은 시스템 프롬프트 (Groq 무료 티어 토큰 한도 대응)."""
-    return SYSTEM_PROMPT.format(knowledge=select_context(query, prev_query), today=date.today().isoformat())
+    return SYSTEM_PROMPT.format(
+        persona=load_persona(),
+        knowledge=select_context(query, prev_query),
+        today=date.today().isoformat(),
+    )
 
 
 def stream_reply(messages: list[dict]) -> AsyncIterator[str]:
