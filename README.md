@@ -14,6 +14,7 @@
 - 위치를 묻는 답변에는 **핀 찍힌 캠퍼스 지도 이미지**를 함께 표시 (클릭하면 크게)
 - 질문과 관련된 자료만 골라 LLM 에 전달 (바이그램+IDF 검색) — 무료 티어 토큰 한도 대응
 - `data/*.md` 에 적은 자료를 지식 베이스로 사용 (파일 추가만 하면 학습 없이 반영)
+- 홈 대시보드: 오늘 식단, 다가오는 학사일정(D-day), 최근 공지, 자주 가는 사이트 바로가기
 - 마스코트(테크뇽 로봇) 기반 채팅 UI, 추천 질문, 답변 실시간 스트리밍, 마크다운 렌더링
 
 ## 실행 방법
@@ -35,7 +36,8 @@ uvicorn app.main:app --reload
 ## 구조
 ```
 app/
-  main.py       FastAPI 서버, /api/chat SSE 스트리밍
+  main.py       FastAPI 서버, /api/chat SSE 스트리밍, /api/home 홈 카드 데이터
+  home.py       수집한 자료에서 홈 화면 요약 생성
   bot.py        시스템 프롬프트 구성
   providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환, Groq 모델 폴백
   retrieval.py  질문 관련 자료 검색 (바이그램 + IDF)

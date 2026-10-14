@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import providers, scraper
+from . import home, providers, scraper
 from .bot import stream_reply
 
 log = logging.getLogger("kwakbot")
@@ -65,6 +65,12 @@ async def index():
 @app.get("/health")
 async def health():
     return {"ok": True, "llm": providers.describe(), "last_refresh": last_refresh}
+
+
+@app.get("/api/home")
+async def home_summary():
+    """홈 화면 카드에 쓸 요약 (오늘 식단·최근 공지·다가오는 일정·바로가기)."""
+    return home.home_summary()
 
 
 @app.post("/api/chat")
