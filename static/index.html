@@ -118,6 +118,8 @@
   dialog .body { overflow: auto; max-height: 80vh; }
   dialog .frame { position: relative; line-height: 0; width: 100%; }
   dialog .frame img { width: 100%; height: auto; display: block; }
+  #imgDlgImg { width: 100%; height: auto; display: block; cursor: zoom-in; }
+  #imgDlgImg.zoomed { width: auto; max-width: none; cursor: zoom-out; }
 
   /* ── 홈 대시보드 ── */
   [hidden] { display: none !important; }   /* #chat 의 display:flex 가 hidden 을 이기지 못하도록 */
@@ -229,6 +231,15 @@
     <button class="close" type="button" aria-label="닫기">✕</button>
   </div>
   <div class="body"><div class="frame" id="mapDlgFrame"></div></div>
+</dialog>
+
+<dialog id="imgDlg">
+  <div class="head">
+    <strong id="imgDlgTitle"></strong>
+    <a id="imgDlgLink" href="#" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent)">원문 보기</a>
+    <button class="close" type="button" aria-label="닫기">✕</button>
+  </div>
+  <div class="body"><img id="imgDlgImg" alt=""></div>
 </dialog>
 
 <script>
@@ -481,6 +492,24 @@ function showView(name) {
 tabHome.addEventListener('click', () => showView('home'));
 tabChat.addEventListener('click', () => showView('chat'));
 
+// ---- 이미지 팝업 (테크노파크 주간 식단표처럼 이미지로만 오는 자료) ----
+const imgDlg = document.getElementById('imgDlg');
+const imgDlgImg = document.getElementById('imgDlgImg');
+
+function openImageDialog({ title, image, url, date }) {
+  document.getElementById('imgDlgTitle').textContent = title + (date ? ` (${date})` : '');
+  const link = document.getElementById('imgDlgLink');
+  link.href = url || '#';
+  link.hidden = !url;
+  imgDlgImg.classList.remove('zoomed');
+  imgDlgImg.src = image;
+  imgDlgImg.alt = title;
+  imgDlg.showModal();
+}
+imgDlgImg.addEventListener('click', () => imgDlgImg.classList.toggle('zoomed'));
+imgDlg.querySelector('.close').addEventListener('click', () => imgDlg.close());
+imgDlg.addEventListener('click', e => { if (e.target === imgDlg) imgDlg.close(); });
+
 // ---- 홈 카드 ----
 const el = (tag, cls, text) => {
   const node = document.createElement(tag);
@@ -520,17 +549,15 @@ function menuCard(menu, tp) {
     views.push({ label: '테크노파크', title: '서울테크노파크(7번) 구내식당', draw: () => {
       const wrap = el('div');
       wrap.style.padding = '0 16px 14px';
-      const a = el('a');
-      a.href = tp.url; a.target = '_blank'; a.rel = 'noopener';
       const img = el('img');
       img.src = tp.image;
       img.alt = tp.title;
       img.loading = 'lazy';
-      img.style.cssText = 'width:100%;border-radius:10px;border:1px solid var(--border);display:block';
-      a.append(img);
-      const cap = el('div', null, `${tp.title} · ${tp.date} 게시 (클릭하면 원문)`);
+      img.style.cssText = 'width:100%;border-radius:10px;border:1px solid var(--border);display:block;cursor:zoom-in';
+      img.addEventListener('click', () => openImageDialog(tp));
+      const cap = el('div', null, `${tp.title} · ${tp.date} 게시 (클릭하면 크게)`);
       cap.style.cssText = 'font-size:11.5px;color:var(--muted);margin-top:6px';
-      wrap.append(a, cap);
+      wrap.append(img, cap);
       return wrap;
     }});
   }
