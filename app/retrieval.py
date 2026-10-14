@@ -156,7 +156,23 @@ def load_chunks() -> list[Chunk]:
     return out
 
 
-PREV_WEIGHT = 0.3  # 직전 질문은 후속 질문("그건 언제야?") 보조용이라 약하게만 반영
+PREV_WEIGHT = 0.3   # 직전 질문은 후속 질문("그건 언제야?") 보조용이라 약하게만 반영
+DATE_WEIGHT = 2.0   # "오늘"에서 풀어낸 날짜는 가장 결정적인 단서
+SYNONYM_WEIGHT = 0.5  # 동의어는 보조 단서일 뿐 (원래 단어보다 약하게)
+
+
+def _query_grams(query: str) -> dict[str, float]:
+    """질문 → {바이그램: 가중치}. 날짜는 높게, 동의어는 낮게 본다."""
+    words = _query_words(query)                       # 원래 단어 + 동의어
+    base = set(_WORD_RE.findall(query))
+    dates = set(_WORD_RE.findall(_expand_dates(query))) - set(_WORD_RE.findall(query))
+
+    weights: dict[str, float] = {}
+    for word, weight in ([(w, 1.0 if w in base else SYNONYM_WEIGHT) for w in words]
+                         + [(d, DATE_WEIGHT) for d in dates]):
+        for gram in _bigrams(word):
+            weights[gram] = max(weights.get(gram, 0.0), weight)
+    return weights
 
 
 def select_context(query: str, prev_query: str = "", budget: int = CONTEXT_BUDGET_CHARS) -> str:
@@ -173,15 +189,15 @@ def select_context(query: str, prev_query: str = "", budget: int = CONTEXT_BUDGE
     df = Counter(g for gs in grams for g in gs)
     n = len(chunks) or 1
     idf = lambda g: math.log(1 + n / df[g]) if g in df else 0.0
-    q = _bigrams(" ".join(_query_words(_expand_dates(query))))
-    q_prev = _bigrams(" ".join(_query_words(_expand_dates(prev_query)))) - q if prev_query else set()
+    q = _query_grams(query)
+    q_prev = {g: w for g, w in _query_grams(prev_query).items() if g not in q} if prev_query else {}
     # 각 질문의 점수를 0~1 로 정규화해야 긴 직전 질문이 짧은 현재 질문을 덮지 않는다
-    q_total = sum(idf(g) for g in q) or 1.0
-    prev_total = sum(idf(g) for g in q_prev) or 1.0
+    q_total = sum(idf(g) * w for g, w in q.items()) or 1.0
+    prev_total = sum(idf(g) * w for g, w in q_prev.items()) or 1.0
     scored = []
     for c, gs in zip(chunks, grams):
-        score = sum(idf(g) for g in q & gs) / q_total
-        score += PREV_WEIGHT * sum(idf(g) for g in q_prev & gs) / prev_total
+        score = sum(idf(g) * q[g] for g in q.keys() & gs) / q_total
+        score += PREV_WEIGHT * sum(idf(g) * q_prev[g] for g in q_prev.keys() & gs) / prev_total
         if score > 0:
             scored.append((score, c.date, c))
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
