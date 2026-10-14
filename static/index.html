@@ -498,34 +498,62 @@ function card(title, icon, more) {
   return box;
 }
 
-function menuCard(menu) {
-  const box = card('오늘 식단', '🍚', '생활관 식당');
-  if (!menu.length) {
-    box.append(el('div', 'empty', '오늘은 식단이 올라오지 않았어요. (주말·공휴일이거나 아직 미게시)'));
-    box.querySelector('.empty').style.padding = '0 16px 16px';
-    return box;
-  }
+function menuCard(menu, tp) {
+  const box = card('오늘 식단', '🍚', '생활관 · 테크노파크');
   const tabs = el('div', 'dorm-tabs');
-  const list = el('ul');
-  const draw = (i) => {
-    [...tabs.children].forEach((b, n) => b.setAttribute('aria-selected', String(n === i)));
-    list.replaceChildren();
-    for (const [meal, body] of Object.entries(menu[i].meals)) {
+  const body = el('div');
+
+  // 생활관 식당들 + (있으면) 테크노파크 주간 식단표 이미지
+  const views = menu.map(m => ({ label: m.name.replace(' 식당', ''), title: m.who, draw: () => {
+    const list = el('ul');
+    for (const [meal, text] of Object.entries(m.meals)) {
       const li = el('li');
       const wrap = el('div', 'meal');
-      wrap.append(el('b', null, meal), el('span', null, body));
+      wrap.append(el('b', null, meal), el('span', null, text));
       li.append(wrap);
       list.append(li);
     }
+    return list;
+  }}));
+
+  if (tp && tp.image) {
+    views.push({ label: '테크노파크', title: '서울테크노파크(7번) 구내식당', draw: () => {
+      const wrap = el('div');
+      wrap.style.padding = '0 16px 14px';
+      const a = el('a');
+      a.href = tp.url; a.target = '_blank'; a.rel = 'noopener';
+      const img = el('img');
+      img.src = tp.image;
+      img.alt = tp.title;
+      img.loading = 'lazy';
+      img.style.cssText = 'width:100%;border-radius:10px;border:1px solid var(--border);display:block';
+      a.append(img);
+      const cap = el('div', null, `${tp.title} · ${tp.date} 게시 (클릭하면 원문)`);
+      cap.style.cssText = 'font-size:11.5px;color:var(--muted);margin-top:6px';
+      wrap.append(a, cap);
+      return wrap;
+    }});
+  }
+
+  if (!views.length) {
+    const empty = el('div', 'empty', '오늘은 식단이 올라오지 않았어요. (주말·공휴일이거나 아직 미게시)');
+    empty.style.padding = '0 16px 16px';
+    box.append(empty);
+    return box;
+  }
+
+  const draw = (i) => {
+    [...tabs.children].forEach((b, n) => b.setAttribute('aria-selected', String(n === i)));
+    body.replaceChildren(views[i].draw());
   };
-  menu.forEach((m, i) => {
-    const b = el('button', null, m.name.replace(' 식당', ''));
+  views.forEach((v, i) => {
+    const b = el('button', null, v.label);
     b.type = 'button';
-    b.title = m.who;
+    b.title = v.title;
     b.addEventListener('click', () => draw(i));
     tabs.append(b);
   });
-  box.append(tabs, list);
+  box.append(tabs, body);
   draw(0);
   return box;
 }
@@ -579,7 +607,7 @@ fetch('/api/home').then(r => r.json()).then(d => {
   document.getElementById('heroSub').textContent =
     `${Number(m)}월 ${Number(day)}일 (${d.weekday}) · 오늘의 서울과기대 소식이에요.`;
   document.getElementById('cards').append(
-    menuCard(d.menu), scheduleCard(d.schedule), noticeCard(d.notices), linkCard(d.shortcuts));
+    menuCard(d.menu, d.technopark), scheduleCard(d.schedule), noticeCard(d.notices), linkCard(d.shortcuts));
   document.getElementById('stamp').textContent = d.collected_at ? `자료 수집: ${d.collected_at}` : '';
 }).catch(() => {
   document.getElementById('cards').append(el('div', 'empty', '소식을 불러오지 못했어요. 서버가 켜져 있는지 확인해 주세요.'));

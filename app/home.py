@@ -4,8 +4,9 @@
 """
 from __future__ import annotations
 
+import json
 import re
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -109,6 +110,17 @@ def upcoming_schedule(limit: int = 6, today: date | None = None) -> list[dict]:
     return unique[:limit]
 
 
+def technopark() -> dict | None:
+    """테크노파크 구내식당 주간 식단표 (이미지로 올라오므로 이미지 주소를 그대로 보여준다)."""
+    path = DATA_DIR / "auto_menu_extra.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("technopark")
+    except ValueError:
+        return None
+
+
 def collected_at() -> str:
     for line in _read("auto_notices.md"):
         if line.startswith("- 수집 시각:"):
@@ -123,6 +135,7 @@ def home_summary() -> dict:
         "weekday": WEEKDAYS[today.weekday()],
         "collected_at": collected_at(),
         "menu": today_menu(today),
+        "technopark": technopark(),
         "notices": recent_notices(),
         "schedule": upcoming_schedule(today=today),
         "shortcuts": SHORTCUTS,

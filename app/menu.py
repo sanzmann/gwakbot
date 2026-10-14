@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime
@@ -19,6 +20,7 @@ log = logging.getLogger("kwakbot.menu")
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 OUT = DATA_DIR / "auto_menu.md"
+OUT_JSON = DATA_DIR / "auto_menu_extra.json"   # 홈 화면용 (식단표 이미지 주소 등)
 HEADERS = {"User-Agent": "Mozilla/5.0 (kwakbot; +https://github.com/sanzmann/gwakbot)"}
 TIMEOUT = 20
 
@@ -30,8 +32,13 @@ DORMS = [("kb", "KB학사 식당", "불암학사·KB학사·창명학사 사생"
 # 학교 홈페이지 '식단' 페이지가 안내하는 Notion 메뉴판
 NOTION_PAGE = "https://fern-magic-bde.notion.site/21e45244ac0a80fdb02ad064ce75d674"
 NOTION_SPACE = "5a939ea0-b332-4365-96e0-413703544878"
-NOTION_DBS = [("ST:Table (제1학생회관)", "22345244-ac0a-8062-86bd-000b564de5f4", "22345244-ac0a-807c-ad39-000c423759b5"),
-              ("ST:Dining (제2학생회관)", "22345244-ac0a-801b-8ee1-000b50d50c14", "22345244-ac0a-8001-8c7e-000c2da02c00")]
+NOTION_DBS = [("ST:Table 제1학생회관(37번) 학생 제1식당", "22345244-ac0a-8062-86bd-000b564de5f4", "22345244-ac0a-807c-ad39-000c423759b5"),
+              ("ST:Dining 제2학생회관(52번) 학생 제2식당", "22345244-ac0a-801b-8ee1-000b50d50c14", "22345244-ac0a-8001-8c7e-000c2da02c00")]
+
+# 교내 서울테크노파크(7번 건물) 구내식당 — 주간 식단표를 이미지로 올린다
+TP_BOARD = "https://www.seoultp.or.kr/user/nd70791.do"
+TP_VIEW = TP_BOARD + "?View&boardNo="
+_TP_NO_RE = re.compile(r"goBoardView\([^)]*'(\d+)'\)")
 
 _WEEK_RE = re.compile(r"\d{4}년\s*\d{1,2}월\s*\d{1,2}주")
 _MEAL_RE = re.compile(r"(아침|점심|저녁)\s*:")
@@ -116,6 +123,27 @@ def fetch_notion_menu(cid: str, vid: str) -> list[tuple[str, str, str]]:
     return rows
 
 
+def fetch_technopark() -> dict | None:
+    """서울테크노파크 구내식당의 최신 주간 식단표 (제목·날짜·글 주소·이미지 주소)."""
+    soup = BeautifulSoup(requests.get(TP_BOARD, headers=HEADERS, timeout=TIMEOUT).text, "lxml")
+    for tr in soup.select("table tbody tr"):
+        cells = [td.get_text(" ", strip=True) for td in tr.find_all("td")]
+        link = tr.find("a", href=True)
+        m = _TP_NO_RE.search(link["href"]) if link else None
+        if not (m and len(cells) >= 4):
+            continue
+        post_url = TP_VIEW + m.group(1)
+        view = BeautifulSoup(requests.get(post_url, headers={**HEADERS, "Referer": TP_BOARD}, timeout=TIMEOUT).text, "lxml")
+        img = next((i.get("src") for i in view.select("img") if "attachfile" in (i.get("src") or "")), None)
+        return {
+            "title": link.get_text(" ", strip=True),
+            "date": cells[3],
+            "url": post_url,
+            "image": "https://www.seoultp.or.kr" + img if img else "",
+        }
+    return None
+
+
 def refresh_menu() -> dict:
     now = datetime.now()
     lines = [
@@ -163,6 +191,23 @@ def refresh_menu() -> dict:
         for brand, name, price in rows:
             lines.append(f"- {title} {brand} | {name} | {price}원")
         summary["menus"] += len(rows)
+
+    lines.append("")
+    try:
+        tp = fetch_technopark()
+    except Exception as e:  # 외부 기관 사이트라 실패해도 나머지는 유지
+        log.warning("테크노파크 식단 수집 실패: %s", e)
+        tp = None
+    lines.append("## 테크노파크 구내식당 (서울테크노파크, 7번 건물)")
+    lines.append("- 테크노파크 구내식당은 교내 서울테크노파크(7번 건물)에 있습니다.")
+    if tp:
+        lines.append(f"- 테크노파크 식당 식단표: {tp['title']} ({tp['date']} 게시). "
+                     f"주간 식단표가 이미지로 올라와서 메뉴 글자는 자료에 없음 — 보려면 {tp['url']}")
+    else:
+        lines.append(f"- 테크노파크 식당 주간 식단표는 {TP_BOARD} 에 이미지로 올라옵니다.")
+    summary["technopark"] = tp
+    OUT_JSON.write_text(json.dumps({"technopark": tp}, ensure_ascii=False, indent=1),
+                        encoding="utf-8", newline="\n")
 
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     log.info("식단 수집 완료: %s", summary)
