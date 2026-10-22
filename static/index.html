@@ -135,6 +135,18 @@
     background: var(--panel); color: var(--text); font-size: 16px; line-height: 1; cursor: pointer;
     box-shadow: var(--shadow); display: grid; place-items: center; padding: 0; }
   .zoomctl button:hover { border-color: var(--accent); color: var(--accent); }
+  .binfo { position: absolute; left: 12px; top: 12px; z-index: 4; width: min(300px, calc(100% - 24px));
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+    padding: 12px 14px; max-height: calc(100% - 24px); overflow-y: auto; }
+  .binfo h4 { margin: 0 0 2px; font-size: 15px; }
+  .binfo .num { font-size: 11.5px; color: #fff; background: var(--pin); border-radius: 999px; padding: 1px 8px; margin-right: 6px; }
+  .binfo .orgs { font-size: 12.5px; color: var(--accent); margin: 6px 0 0; line-height: 1.5; }
+  .binfo .note { font-size: 12.5px; color: var(--red); margin: 7px 0 0; line-height: 1.5; }
+  .binfo ul { list-style: none; margin: 8px 0 0; padding: 0; }
+  .binfo li { font-size: 12.5px; color: var(--muted); padding: 3px 0; border-top: 1px solid var(--border); }
+  .binfo .close2 { position: absolute; right: 8px; top: 8px; background: none; border: none; color: var(--muted);
+    font-size: 15px; cursor: pointer; padding: 2px 5px; }
+  .binfo .more2 { font-size: 11.5px; color: var(--muted); margin-top: 7px; }
   .zoomhint { position: absolute; left: 12px; bottom: 14px; z-index: 3; font-size: 11.5px; color: var(--muted);
     background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; opacity: .92; }
 
@@ -258,7 +270,7 @@
   <div class="body">
     <div class="zoomwrap" id="mapZoom">
       <div class="pz"><div class="frame" id="mapDlgFrame"></div></div>
-      <span class="zoomhint">휠로 확대 · 드래그로 이동</span>
+      <span class="zoomhint">핀을 누르면 건물 정보 · 휠로 확대 · 드래그로 이동</span>
       <div class="zoomctl">
         <button type="button" data-zoom="out" aria-label="축소">−</button>
         <button type="button" data-zoom="in" aria-label="확대">＋</button>
@@ -297,7 +309,9 @@ const history = [];
 
 // ---- 캠퍼스 지도 데이터 (app/campus_map.py 가 생성) ----
 let MAP = null;
-fetch('/static/campus_buildings.json').then(r => r.ok ? r.json() : null).then(d => { MAP = d; }).catch(() => {});
+// 수집기가 주기적으로 갱신하므로 캐시를 쓰지 않고 매번 서버에 확인한다
+fetch('/static/campus_buildings.json', { cache: 'no-cache' })
+  .then(r => r.ok ? r.json() : null).then(d => { MAP = d; }).catch(() => {});
 
 const LOCATION_Q = /어디\s*(있|야|에|냐|쯤|인가)|어딨|위치|찾아가|가는\s*법|건물|호실|몇\s*층|지도|캠퍼스/;
 
@@ -372,7 +386,7 @@ function buildMapBox(pins) {
 }
 
 // ---- 확대·이동 (휠/핀치 줌, 드래그) ----
-function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
+function makePanZoom(wrap, { min = 1, max = 8, onTap = null } = {}) {
   const content = wrap.querySelector('.pz');
   let scale = 1, tx = 0, ty = 0;
 
@@ -410,7 +424,7 @@ function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
 
   // 드래그(한 손가락) + 핀치(두 손가락)
   const pointers = new Map();
-  let last = null, pinch = 0;
+  let last = null, pinch = 0, moved = 0, downAt = null;
 
   wrap.addEventListener('dragstart', e => e.preventDefault());
   wrap.addEventListener('pointerdown', e => {
@@ -419,6 +433,8 @@ function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
     wrap.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     last = { x: e.clientX, y: e.clientY };
+    moved = 0;
+    downAt = { x: e.clientX, y: e.clientY };
     wrap.classList.add('grabbing');
   });
 
@@ -437,6 +453,7 @@ function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
       return;
     }
     if (last) {
+      moved += Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y);
       tx += e.clientX - last.x;
       ty += e.clientY - last.y;
       last = { x: e.clientX, y: e.clientY };
@@ -445,6 +462,12 @@ function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
   });
 
   const release = e => {
+    // 거의 움직이지 않았다면 클릭으로 보고, 콘텐츠 기준 좌표를 넘긴다
+    if (onTap && downAt && moved < 6 && pointers.size === 1 && !e.target.closest('[data-zoom]')) {
+      const r = wrap.getBoundingClientRect();
+      onTap((e.clientX - r.left - tx) / scale, (e.clientY - r.top - ty) / scale, content);
+    }
+    downAt = null;
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinch = 0;
     if (!pointers.size) { last = null; wrap.classList.remove('grabbing'); }
@@ -465,12 +488,57 @@ function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
 
 const dlg = document.getElementById('mapDlg');
 const dlgFrame = document.getElementById('mapDlgFrame');
-const mapPanZoom = makePanZoom(document.getElementById('mapZoom'));
+const mapZoomEl = document.getElementById('mapZoom');
+
+// 지도에서 누른 지점과 가장 가까운 건물 핀을 찾아 정보 카드를 띄운다
+function showBuildingInfo(b) {
+  mapZoomEl.querySelector('.binfo')?.remove();
+  const box = el('div', 'binfo');
+  const close = el('button', 'close2', '✕');
+  close.type = 'button';
+  close.addEventListener('click', () => box.remove());
+
+  const title = el('h4');
+  title.append(el('span', 'num', b.num + '번'), document.createTextNode(b.name));
+  box.append(close, title);
+
+  if (b.note) box.append(el('p', 'note', '※ ' + b.note));
+  if (b.orgs?.length) box.append(el('p', 'orgs', b.orgs.join(' · ')));
+
+  if (b.rooms?.length) {
+    const list = el('ul');
+    b.rooms.forEach(r => list.append(el('li', null, r)));
+    box.append(list);
+    if (b.roomCount > b.rooms.length) {
+      box.append(el('p', 'more2', `그 외 ${b.roomCount - b.rooms.length}개 호실은 학교 캠퍼스지도에서 확인하세요.`));
+    }
+  } else if (!b.orgs?.length && !b.note) {
+    box.append(el('p', 'more2', '이 건물의 상세 호실 정보는 자료에 없어요.'));
+  }
+  mapZoomEl.append(box);
+}
+
+function pickBuilding(cx, cy, content) {
+  if (!MAP) return;
+  // 콘텐츠 좌표(px) → 지도 원본 좌표(900x582) 로 환산
+  const sx = MAP.width / content.offsetWidth, sy = MAP.height / content.offsetHeight;
+  const mx = cx * sx, my = cy * sy;
+  let best = null, bestDist = Infinity;
+  for (const b of MAP.buildings) {
+    const d = Math.hypot(b.x - mx, b.y - my);
+    if (d < bestDist) { best = b; bestDist = d; }
+  }
+  if (best && bestDist < 26) showBuildingInfo(best);
+  else mapZoomEl.querySelector('.binfo')?.remove();
+}
+
+const mapPanZoom = makePanZoom(mapZoomEl, { onTap: pickBuilding });
 function openMapDialog(pins) {
   if (!MAP) return;
   const marked = pins && pins.length;
   dlgFrame.replaceChildren(mapImage());
   renderPins(dlgFrame, marked ? pins : MAP.buildings, { label: !!marked, ping: !!marked });
+  mapZoomEl.querySelector('.binfo')?.remove();
   dlg.showModal();
   mapPanZoom.reset();
   // 지도 이미지가 아직 로드되지 않았으면 높이를 알 수 없으므로 로드 후 한 번 더 맞춘다
@@ -653,12 +721,13 @@ imgDlg.querySelector('.close').addEventListener('click', () => imgDlg.close());
 imgDlg.addEventListener('click', e => { if (e.target === imgDlg) imgDlg.close(); });
 
 // ---- 홈 카드 ----
-const el = (tag, cls, text) => {
+// 함수 선언이라 위쪽(지도 정보 카드)에서도 쓸 수 있다
+function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
   if (text != null) node.textContent = text;
   return node;
-};
+}
 
 function card(title, icon, more) {
   const box = el('div', 'card');

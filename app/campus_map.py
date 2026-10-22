@@ -31,6 +31,12 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (kwakbot; +https://github.com/sanzmann/gwa
 
 TABS = ["대학", "대학원", "복지시설", "행정지원"]
 
+# 학교 지도에는 없지만 학생이 알아야 하는 현장 상황 (재학생 제보). 건물 번호 -> 메모
+BUILDING_NOTES = {
+    "13": "현재 정문이 철거되어 문 없이 뻥 뚫려 있는 상태입니다. (2026-10-22 재학생 제보, 이후 바뀔 수 있음)",
+}
+MAX_ROOMS_IN_JSON = 14  # 지도 팝업에 보여줄 호실 수
+
 # 학생이 찾을 만한 공간만 남긴다 (교수연구실·강의실·화장실 등 3천 개 중 대부분은 제외)
 KEEP_ROOM = re.compile(
     r"사무실|행정실|센터|식당|매점|카페|편의점|열람실|자료실|은행|우체국|보건|상담|휴게|세미나|강당|회의실|"
@@ -96,7 +102,7 @@ def refresh_campus_map() -> dict:
         if bid in buildings:
             continue
         buildings[bid] = (num, name)
-        markers.append({"num": num, "name": name, "x": x, "y": y})
+        markers.append({"num": num, "name": name, "x": x, "y": y, "id": bid})
 
     # 시설/부서 → 건물 (탭 정보)
     facilities: list[tuple[str, str, str]] = []  # (탭, 시설명, 건물표기)
@@ -117,14 +123,29 @@ def refresh_campus_map() -> dict:
     ]
     details: list[str] = []
     kept_rooms = 0
+    by_id = {m["id"]: m for m in markers}
     for bid, (num, name) in sorted(buildings.items(), key=lambda kv: int(kv[1][0] or 0)):
         common, rooms = fetch_building(s, bid)
-        lines.append(f"- {num}번 {name}" + (f": {', '.join(common)}" if common else ""))
+        note = BUILDING_NOTES.get(num, "")
+        lines.append(f"- {num}번 {name}" + (f": {', '.join(common)}" if common else "")
+                     + (f" ※ {note}" if note else ""))
         picked = [(rn, sp) for rn, sp in rooms if KEEP_ROOM.search(sp) and not DROP_ROOM.search(sp)]
+        marker = by_id.get(bid)
+        if marker is not None:  # 지도 팝업에서 핀을 누르면 보여줄 정보
+            marker["orgs"] = common
+            marker["rooms"] = [f"{rn} {sp}" for rn, sp in picked[:MAX_ROOMS_IN_JSON]]
+            marker["roomCount"] = len(picked)
+            if note:
+                marker["note"] = note
         if picked:
             details.append(f"\n## {name} ({num}번) 주요 호실")
             details.extend(f"- {rn} {sp}" for rn, sp in picked)
             kept_rooms += len(picked)
+
+    lines.append("\n## 캠퍼스 현장 메모 (재학생 제보)")
+    for num, note in BUILDING_NOTES.items():
+        name = next((m["name"] for m in markers if m["num"] == num), "")
+        lines.append(f"- {num}번 {name}: {note}")
 
     lines.append("\n## 시설·부서가 있는 건물")
     for tab, label, where in facilities:
