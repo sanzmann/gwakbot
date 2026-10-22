@@ -150,6 +150,39 @@
   .binfo .moreBtn { margin-top: 10px; width: 100%; background: var(--accent-soft); color: var(--accent);
     border: none; border-radius: 9px; padding: 7px 10px; font-size: 12.5px; font-family: inherit; cursor: pointer; }
   .binfo .moreBtn:hover { filter: brightness(.96); }
+  /* 벡터(상세) 캠퍼스 지도 */
+  #mapVector { width: 100%; }
+  #mapVector svg { width: 100%; height: auto; display: block; }
+  .v-bg { fill: #eef5ea; }
+  .v-green { fill: #d7ead2; }
+  .v-pitch { fill: #cfe3bd; }
+  .v-water { fill: #bfdcf0; }
+  .v-parking { fill: #e6e6e2; }
+  .v-road { stroke: #ffffff; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .v-foot { stroke: #f3ece2; fill: none; stroke-linecap: round; stroke-dasharray: 5 4; }
+  .v-bld { fill: #cfd6e4; stroke: #a9b3c6; stroke-width: 1; }
+  .v-bld.known { fill: #b9c6e8; stroke: #7f91c4; cursor: pointer; }
+  .v-bld.known:hover { fill: var(--accent); stroke: var(--accent); }
+  .v-label { font: 600 9px -apple-system, "Malgun Gothic", sans-serif; fill: #3a4253; text-anchor: middle; pointer-events: none; }
+  .v-num { font: 700 9px sans-serif; fill: #fff; text-anchor: middle; pointer-events: none; }
+  .v-numbg { fill: var(--pin); }
+  .v-poi text { font-size: 11px; text-anchor: middle; }
+  @media (prefers-color-scheme: dark) {
+    .v-bg { fill: #1b2a22; } .v-green { fill: #22362a; } .v-pitch { fill: #284031; }
+    .v-water { fill: #1e3a4d; } .v-parking { fill: #262a31; }
+    .v-road { stroke: #39414f; } .v-foot { stroke: #333b47; }
+    .v-bld { fill: #3a4457; stroke: #4d5a72; } .v-bld.known { fill: #4a5c86; stroke: #6c80ad; }
+    .v-label { fill: #c7d0e0; }
+  }
+  .poitoggle { position: absolute; left: 12px; top: 12px; z-index: 4; font-size: 12px; font-family: inherit;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 12px; cursor: pointer; box-shadow: var(--shadow); }
+  .poifilter { position: absolute; left: 12px; top: 46px; z-index: 3; display: flex; flex-wrap: wrap; gap: 5px;
+    width: min(330px, calc(100% - 24px)); background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 9px; box-shadow: var(--shadow); }
+  .poifilter button { font-size: 11.5px; font-family: inherit; border: 1px solid var(--border);
+    background: var(--panel); color: var(--muted); border-radius: 999px; padding: 4px 9px; cursor: pointer; opacity: .9; }
+  .poifilter button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
   .zoomhint { position: absolute; left: 12px; bottom: 14px; z-index: 3; font-size: 11.5px; color: var(--muted);
     background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; opacity: .92; }
 
@@ -267,13 +300,22 @@
 <dialog id="mapDlg">
   <div class="head">
     <strong>캠퍼스 지도</strong>
-    <a href="https://www.seoultech.ac.kr/intro/map/" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent)">학교 홈페이지에서 보기</a>
+    <div class="tabs" id="mapModeTabs" role="tablist">
+      <button type="button" role="tab" data-mode="vector" aria-selected="true">상세 지도</button>
+      <button type="button" role="tab" data-mode="image" aria-selected="false">일러스트</button>
+    </div>
+    <a href="https://www.seoultech.ac.kr/intro/map/" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent)">학교 지도</a>
     <button class="close" type="button" aria-label="닫기">✕</button>
   </div>
   <div class="body">
     <div class="zoomwrap" id="mapZoom">
-      <div class="pz"><div class="frame" id="mapDlgFrame"></div></div>
-      <span class="zoomhint">핀을 누르면 건물 정보 · 휠로 확대 · 드래그로 이동</span>
+      <div class="pz">
+        <div class="frame" id="mapDlgFrame"></div>
+        <div class="frame" id="mapVector"></div>
+      </div>
+      <button class="poitoggle" id="poiToggle" type="button">🏪 편의시설 ▾</button>
+      <div class="poifilter" id="poiFilter" hidden></div>
+      <span class="zoomhint">건물을 누르면 정보 · 휠로 확대 · 드래그로 이동</span>
       <div class="zoomctl">
         <button type="button" data-zoom="out" aria-label="축소">−</button>
         <button type="button" data-zoom="in" aria-label="확대">＋</button>
@@ -389,9 +431,10 @@ function buildMapBox(pins) {
 }
 
 // ---- 확대·이동 (휠/핀치 줌, 드래그) ----
-const UI_IN_WRAP = '[data-zoom], .binfo';   // 지도 위에 떠 있는 조작 요소들
+const UI_IN_WRAP = '[data-zoom], .binfo, .poifilter, .poitoggle';   // 지도 위에 떠 있는 조작 요소들
 
 function makePanZoom(wrap, { min = 1, max = 8, onTap = null } = {}) {
+  // min 은 reset() 에서 화면에 맞춰 다시 계산된다
   const content = wrap.querySelector('.pz');
   let scale = 1, tx = 0, ty = 0;
 
@@ -414,7 +457,12 @@ function makePanZoom(wrap, { min = 1, max = 8, onTap = null } = {}) {
     apply();
   };
 
-  const reset = () => { scale = 1; tx = ty = 0; apply(); };
+  // 세로가 넘칠 때는 전체가 보이도록 줄여서 시작하고, 그 배율을 최소 배율로 삼는다
+  const fitScale = () => {
+    const h = wrap.clientHeight, ch = content.offsetHeight;
+    return ch && ch > h ? Math.max(0.2, h / ch) : 1;
+  };
+  const reset = () => { min = fitScale(); scale = min; tx = ty = 0; apply(); };
 
   wrap.addEventListener('wheel', e => {
     e.preventDefault();
@@ -547,6 +595,122 @@ function pickBuilding(cx, cy, content) {
 }
 
 const mapPanZoom = makePanZoom(mapZoomEl, { onTap: pickBuilding });
+
+// ---- 상세(벡터) 캠퍼스 지도 : OSM 자료를 SVG 로 직접 그린다 ----
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const vectorEl = document.getElementById('mapVector');
+const poiFilterEl = document.getElementById('poiFilter');
+let VEC = null, poiOn = new Set(['편의점', '카페', '식당', '버스정류장']);
+
+const svgEl = (tag, attrs = {}) => {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  return n;
+};
+
+function drawVectorMap() {
+  if (!VEC) return;
+  const box = VEC.focus || [0, 0, VEC.width, VEC.height];
+  const svg = svgEl('svg', { viewBox: box.join(' ') });
+  svg.append(svgEl('rect', { class: 'v-bg', x: box[0], y: box[1], width: box[2], height: box[3] }));
+
+  for (const a of VEC.areas) {
+    svg.append(svgEl('polygon', { class: 'v-' + a.kind, points: a.pts.map(p => p.join(',')).join(' ') }));
+  }
+  for (const p of VEC.paths) {
+    svg.append(svgEl('polyline', {
+      class: 'v-' + p.kind, points: p.pts.map(q => q.join(',')).join(' '),
+      'stroke-width': p.kind === 'road' ? 5 : 2,
+    }));
+  }
+  for (const b of VEC.buildings) {
+    const poly = svgEl('polygon', {
+      class: 'v-bld' + (b.num ? ' known' : ''),
+      points: b.pts.map(p => p.join(',')).join(' '),
+    });
+    if (b.num) {
+      poly.addEventListener('click', () => {
+        const info = MAP?.buildings.find(x => x.num === b.num);
+        if (info) showBuildingInfo(info);
+      });
+      const tip = svgEl('title');
+      tip.textContent = `${b.num}번 ${b.name}`;
+      poly.append(tip);
+    }
+    svg.append(poly);
+  }
+  // 건물 이름·번호
+  for (const b of VEC.buildings) {
+    if (!b.name) continue;
+    const cx = b.pts.reduce((s2, p) => s2 + p[0], 0) / b.pts.length;
+    const cy = b.pts.reduce((s2, p) => s2 + p[1], 0) / b.pts.length;
+    if (b.num) {
+      svg.append(svgEl('circle', { class: 'v-numbg', cx, cy: cy - 7, r: 7 }));
+      const num = svgEl('text', { class: 'v-num', x: cx, y: cy - 4 });
+      num.textContent = b.num;
+      svg.append(num);
+    }
+    const label = svgEl('text', { class: 'v-label', x: cx, y: cy + 10 });
+    label.textContent = b.name;
+    svg.append(label);
+  }
+  // 편의시설
+  for (const p of VEC.pois) {
+    if (!poiOn.has(p.label)) continue;
+    const g = svgEl('g', { class: 'v-poi' });
+    const icon = svgEl('text', { x: p.pt[0], y: p.pt[1] });
+    icon.textContent = p.icon;
+    g.append(icon);
+    const tip = svgEl('title');
+    tip.textContent = p.name ? `${p.label} · ${p.name}` : p.label;
+    g.append(tip);
+    svg.append(g);
+  }
+  vectorEl.replaceChildren(svg);
+}
+
+function drawPoiFilter() {
+  if (!VEC) return;
+  const kinds = [...new Set(VEC.pois.map(p => p.label))];
+  poiFilterEl.replaceChildren(...kinds.map(label => {
+    const count = VEC.pois.filter(p => p.label === label).length;
+    const b = el('button', null, `${VEC.pois.find(p => p.label === label).icon} ${label} ${count}`);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(poiOn.has(label)));
+    b.addEventListener('click', () => {
+      poiOn.has(label) ? poiOn.delete(label) : poiOn.add(label);
+      b.setAttribute('aria-pressed', String(poiOn.has(label)));
+      drawVectorMap();
+    });
+    return b;
+  }));
+}
+
+fetch('/static/campus_vector.json', { cache: 'no-cache' })
+  .then(r => r.ok ? r.json() : null)
+  .then(d => { VEC = d; if (d) { drawVectorMap(); drawPoiFilter(); setMapMode(mapMode); } })
+  .catch(() => {});
+
+// 상세 지도 / 일러스트 전환
+let mapMode = 'vector';
+function setMapMode(mode) {
+  mapMode = VEC ? mode : 'image';
+  vectorEl.hidden = mapMode !== 'vector';
+  dlgFrame.hidden = mapMode === 'vector';
+  document.getElementById('poiToggle').hidden = mapMode !== 'vector';
+  poiFilterEl.hidden = true;
+  document.querySelectorAll('#mapModeTabs button').forEach(b =>
+    b.setAttribute('aria-selected', String(b.dataset.mode === mapMode)));
+  mapPanZoom.reset();
+}
+document.querySelectorAll('#mapModeTabs button').forEach(b =>
+  b.addEventListener('click', () => setMapMode(b.dataset.mode)));
+
+const poiToggle = document.getElementById('poiToggle');
+poiToggle.addEventListener('click', () => {
+  poiFilterEl.hidden = !poiFilterEl.hidden;
+  poiToggle.textContent = '🏪 편의시설 ' + (poiFilterEl.hidden ? '▾' : '▴');
+});
 function openMapDialog(pins) {
   if (!MAP) return;
   const marked = pins && pins.length;
