@@ -59,10 +59,9 @@
   .welcome h2 { margin: 6px 0 4px; font-size: 19px; letter-spacing: -.3px; }
   .welcome p { margin: 0; color: var(--muted); font-size: 14px; }
   #quickbar { max-width: 840px; width: 100%; margin: 0 auto; padding: 4px 18px 0; }
-  #quickbar .chips { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
-    margin: 0; padding: 4px 2px; scrollbar-width: none; -ms-overflow-style: none; }
-  #quickbar .chips::-webkit-scrollbar { display: none; }
-  #quickbar .chips button { flex: none; }
+  /* 한 줄 가로 스크롤은 마우스로 쓸기 어려워서, 줄바꿈으로 전부 보이게 한다 */
+  #quickbar .chips { flex-wrap: wrap; justify-content: center; margin: 0; padding: 4px 0 0; gap: 6px; }
+  #quickbar .chips button { padding: 7px 12px; font-size: 13px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
   .chips button { background: var(--panel); color: var(--text); border: 1px solid var(--border);
     border-radius: 999px; padding: 9px 14px; font-size: 13.5px; cursor: pointer; font-family: inherit;
@@ -126,7 +125,8 @@
 
   /* 확대·이동 (휠/핀치 줌, 드래그) */
   .zoomwrap { position: relative; overflow: hidden; touch-action: none; cursor: grab; background: var(--bg);
-    height: min(72vh, 640px); }
+    height: min(72vh, 640px); user-select: none; -webkit-user-select: none; }
+  .zoomwrap img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
   .zoomwrap.grabbing { cursor: grabbing; }
   .zoomwrap > .pz { transform-origin: 0 0; will-change: transform; }
   .zoomwrap > .pz img { width: 100%; height: auto; display: block; }
@@ -180,12 +180,17 @@
   .empty { color: var(--muted); font-size: 13px; padding: 2px 0 10px; }
   .stamp { text-align: center; font-size: 11.5px; color: var(--muted); padding: 16px 0 6px; }
 
-  @media (max-width: 560px) {
+  @media (max-width: 700px) {
     .row { max-width: 94%; }
     header .who p { display: none; }
     .welcome img { width: 104px; height: 104px; }
     .hero img { width: 72px; height: 72px; }
     .hero h2 { font-size: 18px; }
+    /* 좁은 화면(터치)에서는 한 줄로 두고 손가락으로 쓸어서 넘긴다 */
+    #quickbar .chips { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+      scrollbar-width: none; -ms-overflow-style: none; }
+    #quickbar .chips::-webkit-scrollbar { display: none; }
+    #quickbar .chips button { flex: none; padding: 6px 11px; font-size: 12.5px; }
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
@@ -407,7 +412,10 @@ function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
   const pointers = new Map();
   let last = null, pinch = 0;
 
+  wrap.addEventListener('dragstart', e => e.preventDefault());
   wrap.addEventListener('pointerdown', e => {
+    if (e.target.closest('[data-zoom]')) return;   // 버튼 클릭은 드래그로 보지 않는다
+    e.preventDefault();
     wrap.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     last = { x: e.clientX, y: e.clientY };
