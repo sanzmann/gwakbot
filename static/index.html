@@ -147,6 +147,9 @@
   .binfo .close2 { position: absolute; right: 8px; top: 8px; background: none; border: none; color: var(--muted);
     font-size: 15px; cursor: pointer; padding: 2px 5px; }
   .binfo .more2 { font-size: 11.5px; color: var(--muted); margin-top: 7px; }
+  .binfo .moreBtn { margin-top: 10px; width: 100%; background: var(--accent-soft); color: var(--accent);
+    border: none; border-radius: 9px; padding: 7px 10px; font-size: 12.5px; font-family: inherit; cursor: pointer; }
+  .binfo .moreBtn:hover { filter: brightness(.96); }
   .zoomhint { position: absolute; left: 12px; bottom: 14px; z-index: 3; font-size: 11.5px; color: var(--muted);
     background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; opacity: .92; }
 
@@ -386,6 +389,8 @@ function buildMapBox(pins) {
 }
 
 // ---- 확대·이동 (휠/핀치 줌, 드래그) ----
+const UI_IN_WRAP = '[data-zoom], .binfo';   // 지도 위에 떠 있는 조작 요소들
+
 function makePanZoom(wrap, { min = 1, max = 8, onTap = null } = {}) {
   const content = wrap.querySelector('.pz');
   let scale = 1, tx = 0, ty = 0;
@@ -428,7 +433,7 @@ function makePanZoom(wrap, { min = 1, max = 8, onTap = null } = {}) {
 
   wrap.addEventListener('dragstart', e => e.preventDefault());
   wrap.addEventListener('pointerdown', e => {
-    if (e.target.closest('[data-zoom]')) return;   // 버튼 클릭은 드래그로 보지 않는다
+    if (e.target.closest(UI_IN_WRAP)) return;   // 버튼·정보 카드 클릭은 드래그로 보지 않는다
     e.preventDefault();
     wrap.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -463,7 +468,7 @@ function makePanZoom(wrap, { min = 1, max = 8, onTap = null } = {}) {
 
   const release = e => {
     // 거의 움직이지 않았다면 클릭으로 보고, 콘텐츠 기준 좌표를 넘긴다
-    if (onTap && downAt && moved < 6 && pointers.size === 1 && !e.target.closest('[data-zoom]')) {
+    if (onTap && downAt && moved < 6 && pointers.size === 1 && !e.target.closest(UI_IN_WRAP)) {
       const r = wrap.getBoundingClientRect();
       onTap((e.clientX - r.left - tx) / scale, (e.clientY - r.top - ty) / scale, content);
     }
@@ -503,17 +508,26 @@ function showBuildingInfo(b) {
   box.append(close, title);
 
   if (b.note) box.append(el('p', 'note', '※ ' + b.note));
-  if (b.orgs?.length) box.append(el('p', 'orgs', b.orgs.join(' · ')));
+
+  // 호실을 바로 쏟지 않고, 어떤 학과·기관이 있는지만 먼저 보여준다
+  const summary = [...(b.depts || []), ...(b.orgs || []).filter(o => !(b.depts || []).includes(o))];
+  if (summary.length) box.append(el('p', 'orgs', summary.join(' · ')));
+  else if (!b.note) box.append(el('p', 'more2', '이 건물의 입주 정보는 자료에 없어요.'));
 
   if (b.rooms?.length) {
+    const toggle = el('button', 'moreBtn', `정보 더보기 (호실 ${b.roomCount}개) ▾`);
+    toggle.type = 'button';
     const list = el('ul');
+    list.hidden = true;
     b.rooms.forEach(r => list.append(el('li', null, r)));
-    box.append(list);
     if (b.roomCount > b.rooms.length) {
-      box.append(el('p', 'more2', `그 외 ${b.roomCount - b.rooms.length}개 호실은 학교 캠퍼스지도에서 확인하세요.`));
+      list.append(el('li', 'more2', `그 외 ${b.roomCount - b.rooms.length}개 호실은 학교 캠퍼스지도에서 확인하세요.`));
     }
-  } else if (!b.orgs?.length && !b.note) {
-    box.append(el('p', 'more2', '이 건물의 상세 호실 정보는 자료에 없어요.'));
+    toggle.addEventListener('click', () => {
+      list.hidden = !list.hidden;
+      toggle.textContent = (list.hidden ? '정보 더보기' : '접기') + ` (호실 ${b.roomCount}개) ` + (list.hidden ? '▾' : '▴');
+    });
+    box.append(toggle, list);
   }
   mapZoomEl.append(box);
 }

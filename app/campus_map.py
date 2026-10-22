@@ -35,7 +35,9 @@ TABS = ["대학", "대학원", "복지시설", "행정지원"]
 BUILDING_NOTES = {
     "13": "현재 정문이 철거되어 문 없이 뻥 뚫려 있는 상태입니다. (2026-10-22 재학생 제보, 이후 바뀔 수 있음)",
 }
-MAX_ROOMS_IN_JSON = 14  # 지도 팝업에 보여줄 호실 수
+MAX_ROOMS_IN_JSON = 14  # 지도 팝업의 '정보 더보기'에서 보여줄 호실 수
+# 호실명에서 학과·학부·전공 이름만 추려내기 위한 패턴 (예: "315호 학과사무실(컴퓨터공학과)")
+DEPT_RE = re.compile(r"([가-힣A-Za-z0-9·\s]{2,20}?(?:학과|학부|전공|대학원|대학))")
 
 # 학생이 찾을 만한 공간만 남긴다 (교수연구실·강의실·화장실 등 3천 개 중 대부분은 제외)
 KEEP_ROOM = re.compile(
@@ -94,6 +96,18 @@ def fetch_building(s: requests.Session, bid: str) -> tuple[list[str], list[tuple
     return common, rooms
 
 
+def _departments(common: list[str], rooms: list[tuple[str, str]]) -> list[str]:
+    """이 건물에 있는 학과·학부 이름만 추린다 (호실을 다 나열하지 않고 요약해 보여주기 위해)."""
+    found: list[str] = []
+    for text in list(common) + [space for _, space in rooms]:
+        for part in re.split(r"[/,]", text):
+            for m in DEPT_RE.finditer(part):
+                name = re.sub(r"\s+", "", m.group(1))
+                if name not in found and len(name) >= 3:
+                    found.append(name)
+    return found
+
+
 def refresh_campus_map() -> dict:
     s = _get_session()
     buildings: dict[str, tuple[str, str]] = {}  # id -> (번호, 이름)
@@ -133,6 +147,7 @@ def refresh_campus_map() -> dict:
         marker = by_id.get(bid)
         if marker is not None:  # 지도 팝업에서 핀을 누르면 보여줄 정보
             marker["orgs"] = common
+            marker["depts"] = _departments(common, picked)
             marker["rooms"] = [f"{rn} {sp}" for rn, sp in picked[:MAX_ROOMS_IN_JSON]]
             marker["roomCount"] = len(picked)
             if note:
