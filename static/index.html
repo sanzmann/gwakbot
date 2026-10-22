@@ -58,6 +58,11 @@
   @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
   .welcome h2 { margin: 6px 0 4px; font-size: 19px; letter-spacing: -.3px; }
   .welcome p { margin: 0; color: var(--muted); font-size: 14px; }
+  #quickbar { max-width: 840px; width: 100%; margin: 0 auto; padding: 4px 18px 0; }
+  #quickbar .chips { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+    margin: 0; padding: 4px 2px; scrollbar-width: none; -ms-overflow-style: none; }
+  #quickbar .chips::-webkit-scrollbar { display: none; }
+  #quickbar .chips button { flex: none; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
   .chips button { background: var(--panel); color: var(--text); border: 1px solid var(--border);
     border-radius: 999px; padding: 9px 14px; font-size: 13.5px; cursor: pointer; font-family: inherit;
@@ -115,11 +120,23 @@
   dialog .head strong { font-size: 15px; }
   dialog .head .close { margin-left: auto; background: none; border: none; color: var(--muted);
     font-size: 20px; padding: 0 6px; cursor: pointer; }
-  dialog .body { overflow: auto; max-height: 80vh; }
+  dialog .body { overflow: hidden; max-height: 80vh; }
   dialog .frame { position: relative; line-height: 0; width: 100%; }
   dialog .frame img { width: 100%; height: auto; display: block; }
-  #imgDlgImg { width: 100%; height: auto; display: block; cursor: zoom-in; }
-  #imgDlgImg.zoomed { width: auto; max-width: none; cursor: zoom-out; }
+
+  /* 확대·이동 (휠/핀치 줌, 드래그) */
+  .zoomwrap { position: relative; overflow: hidden; touch-action: none; cursor: grab; background: var(--bg);
+    height: min(72vh, 640px); }
+  .zoomwrap.grabbing { cursor: grabbing; }
+  .zoomwrap > .pz { transform-origin: 0 0; will-change: transform; }
+  .zoomwrap > .pz img { width: 100%; height: auto; display: block; }
+  .zoomctl { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; z-index: 3; }
+  .zoomctl button { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 16px; line-height: 1; cursor: pointer;
+    box-shadow: var(--shadow); display: grid; place-items: center; padding: 0; }
+  .zoomctl button:hover { border-color: var(--accent); color: var(--accent); }
+  .zoomhint { position: absolute; left: 12px; bottom: 14px; z-index: 3; font-size: 11.5px; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; opacity: .92; }
 
   /* ── 홈 대시보드 ── */
   [hidden] { display: none !important; }   /* #chat 의 display:flex 가 hidden 을 이기지 못하도록 */
@@ -207,14 +224,17 @@
     <img src="/static/img/kwakbot.png" alt="곽봇 마스코트">
     <h2>무엇이든 물어보세요</h2>
     <p>학사·식단·장학·건물 위치까지, 아는 만큼 알려드려요.</p>
-    <div class="chips">
+  </div>
+</div>
+
+<div id="quickbar">
+  <div class="chips">
       <button type="button" data-q="오늘 기숙사 식당 점심 뭐야?"><b>식단</b>오늘 점심 뭐야?</button>
       <button type="button" data-q="컴퓨터공학과 사무실 어디야?"><b>위치</b>학과 사무실 어디야?</button>
       <button type="button" data-q="24학번인데 졸업요건 알려줘"><b>졸업</b>졸업요건 알려줘</button>
       <button type="button" data-q="장학금 관련 최근 공지 있어?"><b>장학</b>최근 장학 공지</button>
       <button type="button" data-q="수강신청 사이트 알려줘"><b>수강</b>수강신청 사이트</button>
       <button type="button" data-q="일반휴학 어떻게 신청해?"><b>학사</b>휴학 신청 방법</button>
-    </div>
   </div>
 </div>
 
@@ -230,7 +250,17 @@
     <a href="https://www.seoultech.ac.kr/intro/map/" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent)">학교 홈페이지에서 보기</a>
     <button class="close" type="button" aria-label="닫기">✕</button>
   </div>
-  <div class="body"><div class="frame" id="mapDlgFrame"></div></div>
+  <div class="body">
+    <div class="zoomwrap" id="mapZoom">
+      <div class="pz"><div class="frame" id="mapDlgFrame"></div></div>
+      <span class="zoomhint">휠로 확대 · 드래그로 이동</span>
+      <div class="zoomctl">
+        <button type="button" data-zoom="out" aria-label="축소">−</button>
+        <button type="button" data-zoom="in" aria-label="확대">＋</button>
+        <button type="button" data-zoom="reset" aria-label="원래대로">⟲</button>
+      </div>
+    </div>
+  </div>
 </dialog>
 
 <dialog id="imgDlg">
@@ -239,7 +269,17 @@
     <a id="imgDlgLink" href="#" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent)">원문 보기</a>
     <button class="close" type="button" aria-label="닫기">✕</button>
   </div>
-  <div class="body"><img id="imgDlgImg" alt=""></div>
+  <div class="body">
+    <div class="zoomwrap" id="imgZoom">
+      <div class="pz"><img id="imgDlgImg" alt=""></div>
+      <span class="zoomhint">휠로 확대 · 드래그로 이동</span>
+      <div class="zoomctl">
+        <button type="button" data-zoom="out" aria-label="축소">−</button>
+        <button type="button" data-zoom="in" aria-label="확대">＋</button>
+        <button type="button" data-zoom="reset" aria-label="원래대로">⟲</button>
+      </div>
+    </div>
+  </div>
 </dialog>
 
 <script>
@@ -326,14 +366,108 @@ function buildMapBox(pins) {
   return box;
 }
 
+// ---- 확대·이동 (휠/핀치 줌, 드래그) ----
+function makePanZoom(wrap, { min = 1, max = 8 } = {}) {
+  const content = wrap.querySelector('.pz');
+  let scale = 1, tx = 0, ty = 0;
+
+  const apply = () => {
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    const cw = content.offsetWidth * scale, ch = content.offsetHeight * scale;
+    // 화면보다 작으면 가운데로, 크면 빈 공간이 생기지 않게 가둔다
+    tx = cw <= w ? (w - cw) / 2 : Math.min(0, Math.max(w - cw, tx));
+    ty = ch <= h ? (h - ch) / 2 : Math.min(0, Math.max(h - ch, ty));
+    content.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  };
+
+  // (cx, cy) 지점을 고정한 채 확대·축소
+  const zoomAt = (factor, cx, cy) => {
+    const next = Math.min(max, Math.max(min, scale * factor));
+    const ratio = next / scale;
+    tx = cx - (cx - tx) * ratio;
+    ty = cy - (cy - ty) * ratio;
+    scale = next;
+    apply();
+  };
+
+  const reset = () => { scale = 1; tx = ty = 0; apply(); };
+
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = wrap.getBoundingClientRect();
+    zoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+
+  wrap.addEventListener('dblclick', e => {
+    const r = wrap.getBoundingClientRect();
+    zoomAt(scale >= max - 0.01 ? min / scale : 1.8, e.clientX - r.left, e.clientY - r.top);
+  });
+
+  // 드래그(한 손가락) + 핀치(두 손가락)
+  const pointers = new Map();
+  let last = null, pinch = 0;
+
+  wrap.addEventListener('pointerdown', e => {
+    wrap.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    last = { x: e.clientX, y: e.clientY };
+    wrap.classList.add('grabbing');
+  });
+
+  wrap.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch) {
+        const r = wrap.getBoundingClientRect();
+        zoomAt(dist / pinch, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      }
+      pinch = dist;
+      return;
+    }
+    if (last) {
+      tx += e.clientX - last.x;
+      ty += e.clientY - last.y;
+      last = { x: e.clientX, y: e.clientY };
+      apply();
+    }
+  });
+
+  const release = e => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = 0;
+    if (!pointers.size) { last = null; wrap.classList.remove('grabbing'); }
+  };
+  wrap.addEventListener('pointerup', release);
+  wrap.addEventListener('pointercancel', release);
+
+  wrap.querySelectorAll('[data-zoom]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.zoom;
+      if (kind === 'reset') return reset();
+      zoomAt(kind === 'in' ? 1.5 : 1 / 1.5, wrap.clientWidth / 2, wrap.clientHeight / 2);
+    });
+  });
+
+  return { reset, apply };
+}
+
 const dlg = document.getElementById('mapDlg');
 const dlgFrame = document.getElementById('mapDlgFrame');
+const mapPanZoom = makePanZoom(document.getElementById('mapZoom'));
 function openMapDialog(pins) {
   if (!MAP) return;
   const marked = pins && pins.length;
   dlgFrame.replaceChildren(mapImage());
   renderPins(dlgFrame, marked ? pins : MAP.buildings, { label: !!marked, ping: !!marked });
   dlg.showModal();
+  mapPanZoom.reset();
+  // 지도 이미지가 아직 로드되지 않았으면 높이를 알 수 없으므로 로드 후 한 번 더 맞춘다
+  const mapImg = dlgFrame.querySelector('img');
+  if (mapImg && !mapImg.complete) mapImg.addEventListener('load', mapPanZoom.reset, { once: true });
 }
 document.getElementById('mapBtn').addEventListener('click', () => openMapDialog(null));
 dlg.querySelector('.close').addEventListener('click', () => dlg.close());
@@ -495,18 +629,18 @@ tabChat.addEventListener('click', () => showView('chat'));
 // ---- 이미지 팝업 (테크노파크 주간 식단표처럼 이미지로만 오는 자료) ----
 const imgDlg = document.getElementById('imgDlg');
 const imgDlgImg = document.getElementById('imgDlgImg');
+const imgPanZoom = makePanZoom(document.getElementById('imgZoom'));
 
 function openImageDialog({ title, image, url, date }) {
   document.getElementById('imgDlgTitle').textContent = title + (date ? ` (${date})` : '');
   const link = document.getElementById('imgDlgLink');
   link.href = url || '#';
   link.hidden = !url;
-  imgDlgImg.classList.remove('zoomed');
   imgDlgImg.src = image;
   imgDlgImg.alt = title;
   imgDlg.showModal();
+  imgDlgImg.complete ? imgPanZoom.reset() : imgDlgImg.addEventListener('load', imgPanZoom.reset, { once: true });
 }
-imgDlgImg.addEventListener('click', () => imgDlgImg.classList.toggle('zoomed'));
 imgDlg.querySelector('.close').addEventListener('click', () => imgDlg.close());
 imgDlg.addEventListener('click', e => { if (e.target === imgDlg) imgDlg.close(); });
 
