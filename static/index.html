@@ -164,6 +164,8 @@
   .v-foot { stroke: #f0e4cd; fill: none; stroke-linecap: round; stroke-dasharray: 6 5; }
   .v-shadow { fill: rgba(72, 60, 40, .22); }
   .v-bld { stroke-width: 1.6; stroke-linejoin: round; }
+  .v-wall { stroke-width: 0.8; stroke-linejoin: round; }
+  .v-roof { stroke-width: 1.4; }
   .v-bld.known { cursor: pointer; }
   .v-bld.known:hover { fill: #ffd27f; stroke: #e08a2e; }
   .b-academic { fill: #f7d9ae; stroke: #d7a463; }   /* 강의동 */
@@ -304,12 +306,12 @@
 
 <div id="quickbar">
   <div class="chips">
-      <button type="button" data-q="오늘 기숙사 식당 점심 뭐야?"><b>식단</b>오늘 점심 뭐야?</button>
-      <button type="button" data-q="컴퓨터공학과 사무실 어디야?"><b>위치</b>학과 사무실 어디야?</button>
-      <button type="button" data-q="24학번인데 졸업요건 알려줘"><b>졸업</b>졸업요건 알려줘</button>
+      <button type="button" data-q="졸업요건 알려줘"><b>졸업</b>졸업요건 알려줘</button>
       <button type="button" data-q="장학금 관련 최근 공지 있어?"><b>장학</b>최근 장학 공지</button>
       <button type="button" data-q="수강신청 사이트 알려줘"><b>수강</b>수강신청 사이트</button>
       <button type="button" data-q="일반휴학 어떻게 신청해?"><b>학사</b>휴학 신청 방법</button>
+      <button type="button" data-q="성적 어디서 확인해?"><b>성적</b>성적 확인하는 곳</button>
+      <button type="button" data-q="학생증 어떻게 발급받아?"><b>학생증</b>학생증 발급</button>
   </div>
 </div>
 
@@ -644,6 +646,21 @@ function buildingClass(b) {
   return b.num ? 'b-academic' : 'b-other';
 }
 
+// 건물 종류별 지붕/벽 색 (지붕 밝고 벽은 어둡게 — 입체로 보이도록)
+const TONES = {
+  'b-academic': { mid: '#e8c287', dark: '#d3a868', line: '#b98e4e' },
+  'b-dorm':     { mid: '#e0a9a9', dark: '#c98f8f', line: '#ad7373' },
+  'b-library':  { mid: '#a8c4e8', dark: '#8fabd2', line: '#7490b8' },
+  'b-student':  { mid: '#bcd9a1', dark: '#a3c288', line: '#88a96d' },
+  'b-sports':   { mid: '#edc888', dark: '#d7ac6e', line: '#bd9154' },
+  'b-admin':    { mid: '#c2b1e2', dark: '#a999cc', line: '#8d7db0' },
+  'b-service':  { mid: '#ecd484', dark: '#d4bd6c', line: '#b8a253' },
+  'b-other':    { mid: '#ccd1d9', dark: '#b7bdc6', line: '#9aa1ab' },
+};
+const DEFAULT_LEVELS = { 'b-academic': 5, 'b-dorm': 8, 'b-library': 4, 'b-student': 3,
+  'b-sports': 2, 'b-admin': 5, 'b-service': 2, 'b-other': 4 };
+const LEVEL_PX = 4.2;   // 한 층 높이를 지도 위 몇 px 로 그릴지
+
 function drawVectorMap() {
   if (!VEC) return;
   const box = VEC.focus || [0, 0, VEC.width, VEC.height];
@@ -677,28 +694,46 @@ function drawVectorMap() {
       'stroke-width': p.kind === 'road' ? 5.5 : 2.2,
     }));
   }
-  // 건물: 그림자를 먼저 깔아 살짝 떠 보이게
-  for (const b of VEC.buildings) {
-    svg.append(poly('v-shadow', b.pts.map(p => [p[0] + 2.5, p[1] + 3.5])));
-  }
-  for (const b of VEC.buildings) {
-    const shape = poly('v-bld ' + buildingClass(b) + (b.num ? ' known' : ''), b.pts);
+  // 건물: 바닥 그림자 → 벽 → 지붕 순으로 쌓아 입체로 보이게 한다.
+  // 남쪽(아래)에 있는 건물을 나중에 그려야 앞에 있는 것처럼 가려진다 (화가 알고리즘)
+  const ordered = [...VEC.buildings].sort((a, b) =>
+    Math.max(...a.pts.map(p => p[1])) - Math.max(...b.pts.map(p => p[1])));
+
+  for (const b of ordered) {
+    const cls = buildingClass(b);
+    const tone = TONES[cls] || TONES['b-other'];
+    const h = (b.levels || DEFAULT_LEVELS[cls] || 3) * LEVEL_PX;
+    const up = p => [p[0], p[1] - h];
+
+    svg.append(poly('v-shadow', b.pts.map(p => [p[0] + h * 0.35, p[1] + h * 0.22])));
+
+    // 벽: 변마다 사각형 하나. 가로로 누운 변일수록 어둡게 칠해 면이 구분되게
+    for (let i = 0; i < b.pts.length - 1; i++) {
+      const p1 = b.pts[i], p2 = b.pts[i + 1];
+      if (p2[1] + p1[1] < 0) continue;
+      const horiz = Math.abs(p2[0] - p1[0]) > Math.abs(p2[1] - p1[1]);
+      svg.append(poly('v-wall', [p1, p2, up(p2), up(p1)],
+        { fill: horiz ? tone.dark : tone.mid, stroke: tone.line }));
+    }
+    const roof = poly('v-bld v-roof ' + cls + (b.num ? ' known' : ''), b.pts.map(up));
     if (b.num) {
-      shape.addEventListener('click', () => {
+      roof.addEventListener('click', () => {
         const info = MAP?.buildings.find(x => x.num === b.num);
         if (info) showBuildingInfo(info);
       });
       const tip = svgEl('title');
       tip.textContent = `${b.num}번 ${b.name}`;
-      shape.append(tip);
+      roof.append(tip);
     }
-    svg.append(shape);
+    svg.append(roof);
+    b._top = h;   // 이름표를 지붕 위에 올리기 위해 기억해 둔다
   }
+
   // 건물 이름·번호
   for (const b of VEC.buildings) {
     if (!b.name) continue;
     const cx = b.pts.reduce((s2, p) => s2 + p[0], 0) / b.pts.length;
-    const cy = b.pts.reduce((s2, p) => s2 + p[1], 0) / b.pts.length;
+    const cy = b.pts.reduce((s2, p) => s2 + p[1], 0) / b.pts.length - (b._top || 0);
     if (b.num) {
       svg.append(svgEl('circle', { class: 'v-numbg', cx, cy: cy - 8, r: 7.5 }));
       const num = svgEl('text', { class: 'v-num', x: cx, y: cy - 5 });

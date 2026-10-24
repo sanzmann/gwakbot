@@ -148,9 +148,21 @@ def build() -> dict:
         if geom and "building" in tags:
             name = tags.get("name", "")
             key = _norm(NAME_ALIASES.get(name, name))
+            # 층수(없으면 높이에서 환산)를 받아 입체로 그릴 때 쓴다
+            levels = tags.get("building:levels") or tags.get("building:levels:aboveground")
+            try:
+                levels = float(levels) if levels else None
+            except ValueError:
+                levels = None
+            if levels is None and tags.get("height"):
+                try:
+                    levels = round(float(re.sub(r"[^\d.]", "", tags["height"])) / 3.3, 1)
+                except ValueError:
+                    levels = None
             buildings.append({
                 "name": name,
                 "num": numbers.get(key, ""),
+                "levels": levels or 0,          # 0 이면 화면에서 기본값으로 처리
                 "pts": [project(p["lat"], p["lon"]) for p in geom],
             })
             continue
