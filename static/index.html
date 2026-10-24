@@ -659,17 +659,22 @@ const TONES = {
 };
 const DEFAULT_LEVELS = { 'b-academic': 5, 'b-dorm': 8, 'b-library': 4, 'b-student': 3,
   'b-sports': 2, 'b-admin': 5, 'b-service': 2, 'b-other': 4 };
-const LEVEL_PX = 4.2;   // 한 층 높이를 지도 위 몇 px 로 그릴지
+const LEVEL_PX = 4.6;   // 한 층 높이를 지도 위 몇 px 로 그릴지
+const TILT = 0.62;      // 바닥면을 세로로 누르는 비율 (작을수록 더 옆에서 보는 느낌)
 
 function drawVectorMap() {
   if (!VEC) return;
-  const box = VEC.focus || [0, 0, VEC.width, VEC.height];
+  const f = VEC.focus || [0, 0, VEC.width, VEC.height];
+  // 위-옆에서 내려다보는 느낌: 바닥면을 세로로 눌러 눕히고(TILT), 건물만 그대로 세운다
+  const g = p => [p[0], p[1] * TILT];
+  const headroom = 90;   // 건물이 위로 솟을 공간
+  const box = [f[0], f[1] * TILT - headroom, f[2], f[3] * TILT + headroom + 20];
   const svg = svgEl('svg', { viewBox: box.join(' ') });
 
   // 잔디 질감 패턴
   const defs = svgEl('defs');
-  const pat = svgEl('pattern', { id: 'leaf', width: 18, height: 18, patternUnits: 'userSpaceOnUse' });
-  [[4, 5, 2.1], [12, 11, 1.7], [8, 15, 1.3]].forEach(([cx, cy, r]) =>
+  const pat = svgEl('pattern', { id: 'leaf', width: 18, height: 14, patternUnits: 'userSpaceOnUse' });
+  [[4, 4, 2.1], [12, 9, 1.7], [8, 12, 1.3]].forEach(([cx, cy, r]) =>
     pat.append(svgEl('circle', { class: 'v-greentex', cx, cy, r })));
   defs.append(pat);
   svg.append(defs);
@@ -678,24 +683,21 @@ function drawVectorMap() {
 
   const poly = (cls, pts, extra = {}) =>
     svgEl('polygon', { class: cls, points: pts.map(p => p.join(',')).join(' '), ...extra });
+  const line = (cls, pts, w) =>
+    svgEl('polyline', { class: cls, points: pts.map(p => p.join(',')).join(' '), 'stroke-width': w });
 
   for (const a of VEC.areas) {
-    svg.append(poly('v-' + a.kind, a.pts));
-    if (a.kind === 'green') svg.append(poly('', a.pts, { fill: 'url(#leaf)' }));  // 잔디 위에 질감
+    svg.append(poly('v-' + a.kind, a.pts.map(g)));
+    if (a.kind === 'green') svg.append(poly('', a.pts.map(g), { fill: 'url(#leaf)' }));
   }
-  // 길은 바깥 테두리(진한 색) 위에 안쪽 선(밝은 색)을 겹쳐 또렷하게
   for (const p of VEC.paths.filter(p => p.kind === 'road')) {
-    svg.append(svgEl('polyline', { class: 'v-roadcase', points: p.pts.map(q => q.join(',')).join(' '), 'stroke-width': 8 }));
+    svg.append(line('v-roadcase', p.pts.map(g), 7));
   }
   for (const p of VEC.paths) {
-    svg.append(svgEl('polyline', {
-      class: p.kind === 'road' ? 'v-road' : 'v-foot',
-      points: p.pts.map(q => q.join(',')).join(' '),
-      'stroke-width': p.kind === 'road' ? 5.5 : 2.2,
-    }));
+    svg.append(line(p.kind === 'road' ? 'v-road' : 'v-foot', p.pts.map(g), p.kind === 'road' ? 4.8 : 2));
   }
-  // 건물: 바닥 그림자 → 벽 → 지붕 순으로 쌓아 입체로 보이게 한다.
-  // 남쪽(아래)에 있는 건물을 나중에 그려야 앞에 있는 것처럼 가려진다 (화가 알고리즘)
+
+  // 건물: 바닥 그림자 → 벽 → 지붕. 남쪽(아래) 건물을 나중에 그려 앞에 보이게 한다
   const ordered = [...VEC.buildings].sort((a, b) =>
     Math.max(...a.pts.map(p => p[1])) - Math.max(...b.pts.map(p => p[1])));
 
@@ -703,19 +705,22 @@ function drawVectorMap() {
     const cls = buildingClass(b);
     const tone = TONES[cls] || TONES['b-other'];
     const h = (b.levels || DEFAULT_LEVELS[cls] || 3) * LEVEL_PX;
-    const up = p => [p[0], p[1] - h];
+    const base = b.pts.map(g);                       // 눌린 바닥면
+    const top = base.map(p => [p[0], p[1] - h]);     // 지붕 (높이는 누르지 않는다)
 
-    svg.append(poly('v-shadow', b.pts.map(p => [p[0] + h * 0.35, p[1] + h * 0.22])));
+    svg.append(poly('v-shadow', base.map(p => [p[0] + h * 0.3, p[1] + h * 0.12])));
 
-    // 벽: 변마다 사각형 하나. 가로로 누운 변일수록 어둡게 칠해 면이 구분되게
-    for (let i = 0; i < b.pts.length - 1; i++) {
-      const p1 = b.pts[i], p2 = b.pts[i + 1];
-      if (p2[1] + p1[1] < 0) continue;
+    for (let i = 0; i < base.length - 1; i++) {
+      const p1 = base[i], p2 = base[i + 1];
+      // 뒤쪽(북향) 벽은 건물에 가려 보이지 않으므로 생략 — 겹침이 줄어 더 깔끔하다
+      const facingSouth = p2[0] - p1[0] > 0;
       const horiz = Math.abs(p2[0] - p1[0]) > Math.abs(p2[1] - p1[1]);
-      svg.append(poly('v-wall', [p1, p2, up(p2), up(p1)],
+      if (horiz && !facingSouth) continue;
+      svg.append(poly('v-wall', [p1, p2, [p2[0], p2[1] - h], [p1[0], p1[1] - h]],
         { fill: horiz ? tone.dark : tone.mid, stroke: tone.line }));
     }
-    const roof = poly('v-bld v-roof ' + cls + (b.num ? ' known' : ''), b.pts.map(up));
+
+    const roof = poly('v-bld v-roof ' + cls + (b.num ? ' known' : ''), top);
     if (b.num) {
       roof.addEventListener('click', () => {
         const info = MAP?.buildings.find(x => x.num === b.num);
@@ -726,17 +731,17 @@ function drawVectorMap() {
       roof.append(tip);
     }
     svg.append(roof);
-    b._top = h;   // 이름표를 지붕 위에 올리기 위해 기억해 둔다
+    b._h = h;
   }
 
-  // 건물 이름·번호
+  // 건물 이름·번호 (지붕 위에)
   for (const b of VEC.buildings) {
     if (!b.name) continue;
     const cx = b.pts.reduce((s2, p) => s2 + p[0], 0) / b.pts.length;
-    const cy = b.pts.reduce((s2, p) => s2 + p[1], 0) / b.pts.length - (b._top || 0);
+    const cy = (b.pts.reduce((s2, p) => s2 + p[1], 0) / b.pts.length) * TILT - (b._h || 0);
     if (b.num) {
-      svg.append(svgEl('circle', { class: 'v-numbg', cx, cy: cy - 8, r: 7.5 }));
-      const num = svgEl('text', { class: 'v-num', x: cx, y: cy - 5 });
+      svg.append(svgEl('circle', { class: 'v-numbg', cx, cy: cy - 7, r: 7.5 }));
+      const num = svgEl('text', { class: 'v-num', x: cx, y: cy - 4 });
       num.textContent = b.num;
       svg.append(num);
     }
@@ -744,16 +749,17 @@ function drawVectorMap() {
     label.textContent = b.name;
     svg.append(label);
   }
+
   for (const p of VEC.pois) {
     if (!poiOn.has(p.label)) continue;
-    const g = svgEl('g', { class: 'v-poi' });
-    const icon = svgEl('text', { x: p.pt[0], y: p.pt[1] });
+    const grp = svgEl('g', { class: 'v-poi' });
+    const icon = svgEl('text', { x: p.pt[0], y: p.pt[1] * TILT });
     icon.textContent = p.icon;
-    g.append(icon);
+    grp.append(icon);
     const tip = svgEl('title');
     tip.textContent = p.name ? `${p.label} · ${p.name}` : p.label;
-    g.append(tip);
-    svg.append(g);
+    grp.append(tip);
+    svg.append(grp);
   }
   vectorEl.replaceChildren(svg);
 }
