@@ -16,6 +16,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STORE = ROOT / "reports" / "reports.jsonl"
+DATA_DIR = ROOT / "data"
+STUDENT_FILE = "05_student_notes.md"   # 제보로 들어온 내용을 모으는 기본 파일
 
 MAX_MESSAGE = 1000
 MAX_CONTEXT = 600
@@ -90,6 +92,37 @@ def mark_done(report_id: str, done: bool = True) -> bool:
                 "\n".join(json.dumps(it, ensure_ascii=False) for it in items) + "\n",
                 encoding="utf-8", newline="\n")
         return found
+
+
+def knowledge_files() -> list[str]:
+    """제보를 반영할 수 있는 자료 파일 목록 (자동 생성 파일 auto_* 는 제외)."""
+    names = sorted(p.name for p in DATA_DIR.glob("*.md") if not p.name.startswith("auto_"))
+    if STUDENT_FILE not in names:
+        names.insert(0, STUDENT_FILE)
+    return names
+
+
+def append_knowledge(text: str, filename: str = STUDENT_FILE) -> Path:
+    """운영자가 다듬은 내용을 자료 파일에 한 줄 추가한다. 서버 재시작 없이 바로 반영된다."""
+    text = " ".join(text.split()).strip()
+    if not text:
+        raise ValueError("내용이 비어 있습니다.")
+    if filename not in knowledge_files():
+        raise ValueError("허용되지 않은 파일입니다.")
+
+    header = (
+        "# 재학생 제보 모음\n"
+        "- 출처: 곽봇 제보함으로 들어온 재학생 제보를 운영자가 확인해 정리한 내용입니다.\n"
+        "- 학교 홈페이지에 없는 현장 정보가 많으므로, 중요한 건 담당 부서 확인을 함께 안내하세요.\n\n"
+    )
+    path = DATA_DIR / filename
+    today = datetime.now().strftime("%Y-%m-%d")
+    with _lock:
+        if not path.exists():
+            path.write_text(header, encoding="utf-8", newline="\n")
+        with path.open("a", encoding="utf-8", newline="\n") as f:
+            f.write(f"- {text} (재학생 제보, {today} 확인)\n")
+    return path
 
 
 def summary() -> dict:

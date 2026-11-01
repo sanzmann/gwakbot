@@ -5,13 +5,14 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import os
 from html import escape
+from urllib.parse import urlencode
 
 from . import home, providers, reports, scraper
 from .bot import stream_reply
@@ -111,21 +112,43 @@ def _check_admin(request: Request) -> None:
 
 
 @app.get("/admin/reports", response_class=HTMLResponse)
-async def admin_reports(request: Request):
+async def admin_reports(request: Request, saved: str = ""):
     _check_admin(request)
     items = reports.all_items()
+    files = reports.knowledge_files()
+    qs = _token_qs(request)
+
+    def file_options(selected: str = reports.STUDENT_FILE) -> str:
+        return "".join(
+            f"<option value='{escape(f)}'{' selected' if f == selected else ''}>{escape(f)}</option>"
+            for f in files)
+
     rows = []
     for it in items:
         ctx = ""
         if it["question"]:
             ctx = (f"<div class=ctx><b>질문</b> {escape(it['question'])}"
                    f"<br><b>답변</b> {escape(it['answer'][:300])}</div>")
+        # 제보 내용을 그대로 담아둔 수정칸 — 다듬어서 바로 자료에 넣는다
+        editor = (
+            f"<form class=apply method=post action='/admin/reports/{it['id']}/apply{qs}'>"
+            f"<textarea name=text rows=3 placeholder='자료에 넣을 문장으로 다듬어 주세요'>"
+            f"{escape(it['message'])}</textarea>"
+            f"<div class=applyrow><select name=target>{file_options()}</select>"
+            f"<button class=primary>자료에 추가</button></div></form>")
         rows.append(
             f"<li class={'done' if it['done'] else 'todo'}>"
             f"<div class=meta>{it['at']} · {reports.KINDS.get(it['kind'], it['kind'])}"
-            f"<form method=post action='/admin/reports/{it['id']}/toggle{_token_qs(request)}'>"
+            f"<form method=post action='/admin/reports/{it['id']}/toggle{qs}'>"
             f"<button>{'되돌리기' if it['done'] else '처리함'}</button></form></div>"
-            f"<div class=msg>{escape(it['message'])}</div>{ctx}</li>")
+            f"<div class=msg>{escape(it['message'])}</div>{ctx}{editor}</li>")
+
+    direct = (
+        f"<form class='apply direct' method=post action='/admin/knowledge{qs}'>"
+        f"<textarea name=text rows=2 placeholder='제보와 무관하게 직접 추가할 내용'></textarea>"
+        f"<div class=applyrow><select name=target>{file_options()}</select>"
+        f"<button class=primary>자료에 추가</button></div></form>")
+    banner = f"<p class=saved>✓ {escape(saved)} 에 추가했어요. 바로 답변에 반영됩니다.</p>" if saved else ""
     s = reports.summary()
     return f"""<!DOCTYPE html><html lang=ko><head><meta charset=utf-8>
 <title>곽봇 제보함</title><style>
@@ -136,8 +159,21 @@ li.done{{opacity:.5}} .meta{{display:flex;gap:10px;align-items:center;font-size:
 .meta form{{margin-left:auto}} .msg{{margin-top:6px;white-space:pre-wrap}}
 .ctx{{margin-top:8px;font-size:12.5px;color:#6b7687;background:#f5f7fb;border-radius:8px;padding:8px 10px}}
 button{{font-size:12px;padding:4px 10px;border:1px solid #cfd7e3;background:#fff;border-radius:999px;cursor:pointer}}
+button.primary{{background:#1f6feb;border-color:#1f6feb;color:#fff;padding:6px 14px}}
+.apply{{margin-top:10px}}
+.apply textarea{{width:100%;padding:9px 11px;border:1px solid #cfd7e3;border-radius:10px;
+  font:13.5px inherit;resize:vertical;box-sizing:border-box}}
+.applyrow{{display:flex;gap:8px;margin-top:6px;align-items:center}}
+.applyrow select{{flex:1;padding:6px 8px;border:1px solid #cfd7e3;border-radius:8px;font:12.5px inherit}}
+.direct{{border:1px dashed #cfd7e3;border-radius:12px;padding:12px 14px;margin-bottom:14px}}
+.saved{{background:#e7f6ec;border:1px solid #b7e3c6;color:#1c6b3a;border-radius:10px;padding:9px 12px;font-size:13px}}
+h2{{font-size:14px;color:#6b7687;margin:18px 0 6px}}
 </style></head><body><h1>곽봇 제보함</h1>
 <p>전체 {s['total']}건 · 처리 안 함 {s['todo']}건</p>
+{banner}
+<h2>직접 추가</h2>
+{direct}
+<h2>제보</h2>
 <ul>{''.join(rows) or '<li>아직 제보가 없어요.</li>'}</ul></body></html>"""
 
 
@@ -147,6 +183,38 @@ async def toggle_report(report_id: str, request: Request):
     items = {it["id"]: it for it in reports.all_items()}
     reports.mark_done(report_id, not items.get(report_id, {}).get("done", False))
     return RedirectResponse(f"/admin/reports{_token_qs(request)}", status_code=303)
+
+
+def _back(request: Request, saved: str) -> RedirectResponse:
+    token = request.query_params.get("token", "")
+    params = urlencode({k: v for k, v in (("token", token), ("saved", saved)) if v})
+    return RedirectResponse(f"/admin/reports?{params}", status_code=303)
+
+
+@app.post("/admin/reports/{report_id}/apply")
+async def apply_report(report_id: str, request: Request,
+                       text: str = Form(...), target: str = Form(reports.STUDENT_FILE)):
+    """제보를 다듬은 문장을 자료에 추가하고 처리 완료로 표시한다."""
+    _check_admin(request)
+    try:
+        path = reports.append_knowledge(text, target)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    reports.mark_done(report_id, True)
+    log.info("제보 반영: %s → %s", report_id, path.name)
+    return _back(request, path.name)
+
+
+@app.post("/admin/knowledge")
+async def add_knowledge(request: Request,
+                        text: str = Form(...), target: str = Form(reports.STUDENT_FILE)):
+    """제보와 무관하게 운영자가 직접 자료를 추가한다."""
+    _check_admin(request)
+    try:
+        path = reports.append_knowledge(text, target)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _back(request, path.name)
 
 
 @app.post("/api/chat")
