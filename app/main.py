@@ -5,15 +5,23 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import home, providers, scraper
+import os
+from html import escape
+
+from . import home, providers, reports, scraper
 from .bot import stream_reply
 
 log = logging.getLogger("kwakbot")
+
+
+def _token_qs(request: Request) -> str:
+    token = request.query_params.get("token", "")
+    return f"?token={token}" if token else ""
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 # 개인용 단계의 여유 있는 제한. 공개 전환 시 줄일 것.
@@ -53,6 +61,13 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
 
 
+class ReportRequest(BaseModel):
+    kind: str = Field(default="idea", max_length=20)
+    message: str = Field(min_length=2, max_length=reports.MAX_MESSAGE)
+    question: str = Field(default="", max_length=reports.MAX_CONTEXT)
+    answer: str = Field(default="", max_length=reports.MAX_CONTEXT)
+
+
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
@@ -71,6 +86,67 @@ async def health():
 async def home_summary():
     """홈 화면 카드에 쓸 요약 (오늘 식단·최근 공지·다가오는 일정·바로가기)."""
     return home.home_summary()
+
+
+@app.post("/api/report")
+async def create_report(req: ReportRequest):
+    """학생 제보 접수. 공개되지 않고 운영자만 본다."""
+    try:
+        item = reports.add(req.kind, req.message, req.question, req.answer)
+    except RuntimeError as e:
+        raise HTTPException(429, str(e))
+    log.info("제보 접수: %s %s", item["kind"], item["message"][:40])
+    return {"ok": True}
+
+
+def _check_admin(request: Request) -> None:
+    """운영자 화면 보호: 토큰이 설정돼 있으면 토큰, 없으면 내 컴퓨터에서만 허용."""
+    token = os.getenv("ADMIN_TOKEN", "")
+    if token:
+        if request.query_params.get("token") != token:
+            raise HTTPException(404, "not found")
+        return
+    if (request.client.host if request.client else "") not in ("127.0.0.1", "::1"):
+        raise HTTPException(404, "not found")
+
+
+@app.get("/admin/reports", response_class=HTMLResponse)
+async def admin_reports(request: Request):
+    _check_admin(request)
+    items = reports.all_items()
+    rows = []
+    for it in items:
+        ctx = ""
+        if it["question"]:
+            ctx = (f"<div class=ctx><b>질문</b> {escape(it['question'])}"
+                   f"<br><b>답변</b> {escape(it['answer'][:300])}</div>")
+        rows.append(
+            f"<li class={'done' if it['done'] else 'todo'}>"
+            f"<div class=meta>{it['at']} · {reports.KINDS.get(it['kind'], it['kind'])}"
+            f"<form method=post action='/admin/reports/{it['id']}/toggle{_token_qs(request)}'>"
+            f"<button>{'되돌리기' if it['done'] else '처리함'}</button></form></div>"
+            f"<div class=msg>{escape(it['message'])}</div>{ctx}</li>")
+    s = reports.summary()
+    return f"""<!DOCTYPE html><html lang=ko><head><meta charset=utf-8>
+<title>곽봇 제보함</title><style>
+body{{font-family:-apple-system,'Malgun Gothic',sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#1b2230}}
+h1{{font-size:20px}} ul{{list-style:none;padding:0}}
+li{{border:1px solid #e2e7ef;border-radius:12px;padding:12px 14px;margin:10px 0}}
+li.done{{opacity:.5}} .meta{{display:flex;gap:10px;align-items:center;font-size:12px;color:#6b7687}}
+.meta form{{margin-left:auto}} .msg{{margin-top:6px;white-space:pre-wrap}}
+.ctx{{margin-top:8px;font-size:12.5px;color:#6b7687;background:#f5f7fb;border-radius:8px;padding:8px 10px}}
+button{{font-size:12px;padding:4px 10px;border:1px solid #cfd7e3;background:#fff;border-radius:999px;cursor:pointer}}
+</style></head><body><h1>곽봇 제보함</h1>
+<p>전체 {s['total']}건 · 처리 안 함 {s['todo']}건</p>
+<ul>{''.join(rows) or '<li>아직 제보가 없어요.</li>'}</ul></body></html>"""
+
+
+@app.post("/admin/reports/{report_id}/toggle")
+async def toggle_report(report_id: str, request: Request):
+    _check_admin(request)
+    items = {it["id"]: it for it in reports.all_items()}
+    reports.mark_done(report_id, not items.get(report_id, {}).get("done", False))
+    return RedirectResponse(f"/admin/reports{_token_qs(request)}", status_code=303)
 
 
 @app.post("/api/chat")

@@ -40,6 +40,8 @@ uvicorn app.main:app --reload
 app/
   main.py       FastAPI 서버, /api/chat SSE 스트리밍, /api/home 홈 카드 데이터
   home.py       수집한 자료에서 홈 화면 요약 생성
+  reports.py    학생 제보 저장·조회 (reports/reports.jsonl)
+  net.py        학교 서버 인증서 대응 (OS 인증서 저장소 사용)
   bot.py        시스템 프롬프트 구성
   providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환, Groq 모델 폴백
   retrieval.py  질문 관련 자료 검색 (바이그램 + IDF)
@@ -54,6 +56,11 @@ data/           학교 정보 마크다운 (지식 베이스). auto_*.md 는 자
 static/         채팅 UI (img/ 에 마스코트 이미지)
 DEVLOG.md       개발 일지
 ```
+
+## 제보 받기
+학생이 답변 아래 '🚩 이 답변이 틀렸나요?' 또는 화면 맨 아래 '잘못된 정보 알려주기' 를 누르면 제보가 쌓입니다.
+공개되지 않고 `reports/reports.jsonl` 에 저장되며, http://127.0.0.1:8000/admin/reports 에서 확인·처리 표시를 합니다.
+(공개 서버에서는 `.env` 의 `ADMIN_TOKEN` 을 설정하고 `?token=값` 으로 접속)
 
 ## 성격 바꾸기
 `persona.md` 를 고치면 이름·말투·설정이 바뀝니다 (서버 재시작 필요). 코드는 건드리지 않아도 됩니다.

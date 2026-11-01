@@ -8,3 +8,4 @@ __pycache__/
 data/auto_*.md
 data/auto_*.json
 _t.py
+reports/

@@ -49,6 +49,26 @@
   .user { background: var(--user); color: #fff; border-bottom-right-radius: 5px; white-space: pre-wrap; }
   .bot { background: var(--bot); border: 1px solid var(--border); border-bottom-left-radius: 5px;
     box-shadow: var(--shadow); }
+  .reportBtn { background: none; border: none; color: var(--muted); font-size: 11.5px; font-family: inherit;
+    cursor: pointer; padding: 4px 2px 0; opacity: .75; }
+  .reportBtn:hover { color: var(--accent); opacity: 1; text-decoration: underline; }
+  #reportDlg .body { padding: 14px 16px 16px; max-height: none; }
+  #reportDlg p.lead { margin: 0 0 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  #reportDlg .kinds { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  #reportDlg .kinds button { font-size: 12.5px; font-family: inherit; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  #reportDlg .kinds button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent);
+    border-color: transparent; font-weight: 600; }
+  #reportDlg textarea { width: 100%; min-height: 110px; padding: 11px 13px; border: 1px solid var(--border);
+    border-radius: 12px; background: var(--bg); color: var(--text); font: 14px inherit; resize: vertical; }
+  #reportDlg textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  #reportDlg .send { margin-top: 10px; width: 100%; background: var(--accent); color: #fff; border: none;
+    border-radius: 12px; padding: 11px; font-size: 14px; font-family: inherit; cursor: pointer; }
+  #reportDlg .send:disabled { opacity: .5; }
+  #reportDlg .note { margin: 9px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+  .toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 50;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 9px 18px;
+    font-size: 13.5px; box-shadow: var(--shadow); }
   .error { align-self: center; color: var(--red); font-size: 13px; background: var(--panel);
     border: 1px solid var(--border); padding: 8px 14px; border-radius: 999px; }
 
@@ -319,7 +339,8 @@
   <input id="input" type="text" placeholder="궁금한 걸 물어보세요..." autocomplete="off" autofocus>
   <button id="send" type="submit" aria-label="보내기">↑</button>
 </form>
-<div class="foot">곽봇은 학교 홈페이지 자료를 바탕으로 답해요. 중요한 내용은 담당 부서에서 꼭 확인하세요.</div>
+<div class="foot">곽봇은 학교 홈페이지 자료를 바탕으로 답해요. 중요한 내용은 담당 부서에서 꼭 확인하세요.
+  · <button class="reportBtn" id="footReport" type="button">잘못된 정보 알려주기</button></div>
 
 <dialog id="mapDlg">
   <div class="head">
@@ -346,6 +367,24 @@
         <button type="button" data-zoom="reset" aria-label="원래대로">⟲</button>
       </div>
     </div>
+  </div>
+</dialog>
+
+<dialog id="reportDlg">
+  <div class="head">
+    <strong>곽봇에게 알려주기</strong>
+    <button class="close" type="button" aria-label="닫기">✕</button>
+  </div>
+  <div class="body">
+    <p class="lead">틀린 답이나 빠진 정보를 알려주시면 확인 후 반영할게요. 공개되지 않고 운영자만 봅니다.</p>
+    <div class="kinds" id="reportKinds">
+      <button type="button" data-kind="correction" aria-pressed="true">틀린 정보</button>
+      <button type="button" data-kind="missing" aria-pressed="false">없는 정보</button>
+      <button type="button" data-kind="idea" aria-pressed="false">건의</button>
+    </div>
+    <textarea id="reportText" placeholder="예: 테크노파크 식당은 7번 건물 2층이에요."></textarea>
+    <button class="send" id="reportSend" type="button">보내기</button>
+    <p class="note">이름·학번·연락처 같은 개인정보는 적지 말아주세요. 보낸 내용과 직전 질문·답변만 저장됩니다.</p>
   </div>
 </dialog>
 
@@ -936,6 +975,10 @@ async function send(text) {
     }
     if (reply) {
       history.push({ role: 'assistant', content: reply });
+      const flag = el('button', 'reportBtn', '🚩 이 답변이 틀렸나요?');
+      flag.type = 'button';
+      flag.addEventListener('click', () => openReport('correction', { question: text, answer: reply }));
+      msg.append(flag);
       const pins = findBuildings(reply, text);
       if (pins.length) {
         msg.appendChild(buildMapBox(pins));
@@ -953,6 +996,58 @@ async function send(text) {
     input.focus();
   }
 }
+
+// ---- 제보 ----
+const reportDlg = document.getElementById('reportDlg');
+const reportText = document.getElementById('reportText');
+const reportSend = document.getElementById('reportSend');
+let reportKind = 'correction', reportCtx = { question: '', answer: '' };
+
+function openReport(kind, ctx) {
+  reportKind = kind || 'correction';
+  reportCtx = ctx || { question: '', answer: '' };
+  document.querySelectorAll('#reportKinds button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.kind === reportKind)));
+  reportText.value = '';
+  reportDlg.showModal();
+  setTimeout(() => reportText.focus(), 50);
+}
+
+function toast(text) {
+  const t = el('div', 'toast', text);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+document.querySelectorAll('#reportKinds button').forEach(b =>
+  b.addEventListener('click', () => {
+    reportKind = b.dataset.kind;
+    document.querySelectorAll('#reportKinds button').forEach(x =>
+      x.setAttribute('aria-pressed', String(x === b)));
+  }));
+reportDlg.querySelector('.close').addEventListener('click', () => reportDlg.close());
+reportDlg.addEventListener('click', e => { if (e.target === reportDlg) reportDlg.close(); });
+document.getElementById('footReport').addEventListener('click', () => openReport('correction'));
+
+reportSend.addEventListener('click', async () => {
+  const message = reportText.value.trim();
+  if (message.length < 2) { reportText.focus(); return; }
+  reportSend.disabled = true;
+  try {
+    const res = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: reportKind, message, ...reportCtx }),
+    });
+    if (!res.ok) throw new Error(res.status === 429 ? '잠시 후 다시 시도해주세요.' : '보내지 못했어요.');
+    reportDlg.close();
+    toast('알려주셔서 고마워요! 확인하고 반영할게요.');
+  } catch (err) {
+    toast('⚠ ' + err.message);
+  } finally {
+    reportSend.disabled = false;
+  }
+});
 
 form.addEventListener('submit', e => { e.preventDefault(); send(input.value); });
 document.querySelectorAll('.chips button').forEach(b => {
