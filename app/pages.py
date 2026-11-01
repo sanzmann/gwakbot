@@ -10,6 +10,10 @@ from datetime import date
 from pathlib import Path
 
 import requests
+
+from .net import use_system_certificates  # 학교 서버 인증서 문제 대응
+
+use_system_certificates()
 from bs4 import BeautifulSoup, Tag
 
 BASE = "https://www.seoultech.ac.kr"

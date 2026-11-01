@@ -16,6 +16,10 @@ from pathlib import Path
 
 import requests
 
+from .net import use_system_certificates  # 학교 서버 인증서 문제 대응
+
+use_system_certificates()
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "static" / "campus_vector.json"
 BUILDINGS_JSON = ROOT / "static" / "campus_buildings.json"
