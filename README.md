@@ -4,7 +4,7 @@
 
 ## 기능
 - 학교 정보(위치, 교통, 단과대학, 문의처 등) Q&A
-- 학교 홈페이지 공지사항(일반/학사/장학/취업)·학사일정(학부+대학원)·식단 자동 수집 (서버 시작 시 + 6시간마다)
+- 학교 홈페이지 공지사항(일반/학사/장학/취업)·학사일정(학부+대학원)·식단 자동 수집 (GitHub Actions 가 매일 08:00·19:00 KST 에 수집해 저장소에 커밋)
 - 식단: 생활관 식당 주간 식단표·이용시간, 교내 식당(ST:Table=제1학생회관 / ST:Dining=제2학생회관) 메뉴·가격, 테크노파크 주간 식단표(이미지)
 - 학사안내·교통·전화번호·시설·장학·등록금 등 정적 안내 페이지 37개 수집 (`python -m app.pages`)
 - 캠퍼스 지도의 건물 43개·주요 호실 500여 개 (학과 사무실, 식당, 은행 등 위치) (`python -m app.campus_map`)
@@ -51,6 +51,18 @@ GitHub 저장소를 [Render](https://render.com) 에 연결하면, `main` 에 �
 5. 제보함은 `https://주소/admin/reports?token=토큰` — 토큰은 Render 대시보드의
    Environment 탭에서 자동 생성된 `ADMIN_TOKEN` 값입니다 (토큰 없이 접속하면 404)
 
+### 자료는 GitHub Actions 가 모읍니다
+웹서버는 학교 홈페이지를 긁지 않습니다. `.github/workflows/collect.yml` 이 매일 **08:00·19:00 (KST)** 에
+수집해서 `data/auto_*` 를 저장소에 커밋하고, 그 커밋이 Render 재배포를 일으켜 반영됩니다.
+
+무료 플랜은 15분마다 잠들고 방문자가 올 때 깨어나는데, 깰 때마다 긁으면 공지가 하루 몇 건
+올라오지 않는데도 학교 서버에 하루 1,000번 넘게 요청하게 되기 때문입니다. 지금은 하루 90번으로 고정입니다.
+깃에 자료가 담겨 있어서 서버는 깨어나자마자 바로 답할 수 있습니다.
+
+- 급히 갱신하고 싶으면: GitHub 저장소 **Actions ＞ 자료 수집 ＞ Run workflow**
+- 내 컴퓨터에서 수집기를 고쳐 확인할 때: `python -m app.scraper` 또는 `SCRAPE_ON_START=1`
+- 마지막 수집 시각은 `/health` 의 `last_refresh` 에서 확인
+
 ### 공개 운영 시 알아둘 것
 - **사용량 제한**: 한 사람(IP)당 하루 40개·1분에 8개, 전체 하루 1500개까지 질문을 받습니다.
   Groq 무료 한도를 한 명이 다 태우지 못하게 하는 장치입니다. `CHAT_LIMIT_PER_IP`,
@@ -77,6 +89,7 @@ app/
   providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환, Groq 모델 폴백
   retrieval.py  질문 관련 자료 검색 (바이그램 + IDF)
   scraper.py    공지·학사일정 수집 → data/auto_*.md  (수동: python -m app.scraper, 식단도 함께 갱신)
+                평소엔 GitHub Actions 가 하루 2번 돌린다. 서버는 긁지 않고 깃에 담겨온 자료를 쓴다
   menu.py       생활관 식단표 + 교내 식당 메뉴 → data/auto_menu.md  (수동: python -m app.menu)
   curriculum.py 교육과정 PDF → data/25_curriculum_*.md  (수동, 연 1회면 충분)
   scholarship.py 장학금 첨부파일 → data/21_scholarship_detail.md  (수동)
@@ -85,6 +98,7 @@ app/
   campus_map.py 캠퍼스지도의 건물·시설·호실 → data/14_campus_map.md + static/campus_buildings.json(핀 좌표)
 data/           학교 정보 마크다운 (지식 베이스). auto_*.md 는 자동 생성
 static/         채팅 UI (img/ 에 마스코트 이미지)
+.github/workflows/collect.yml  하루 2번 자동 수집 → data/auto_* 커밋 → 재배포
 DEVLOG.md       개발 일지
 ```
 

@@ -30,7 +30,27 @@ MAX_MESSAGE_CHARS = 2000
 MAX_HISTORY_TURNS = 4  # user+assistant 쌍 기준. Groq 무료 티어 토큰 한도 때문에 짧게
 REFRESH_INTERVAL_SEC = 6 * 60 * 60  # 공지·학사일정 재수집 주기
 
+# 평소에는 서버가 학교 홈페이지를 긁지 않는다.
+# 무료 호스팅은 15분마다 잠들고 방문자가 올 때 깨어나는데, 깰 때마다 긁으면
+# 공지가 하루 몇 건 올라오지 않는데도 학교 서버에 하루 1,000번 넘게 요청하게 된다.
+# 대신 GitHub Actions 가 하루 두 번 긁어 data/auto_*.md 를 저장소에 커밋하고,
+# 그 커밋이 재배포를 일으켜 최신 자료가 반영된다 (.github/workflows/collect.yml).
+# 직접 돌려보고 싶을 때는 SCRAPE_ON_START=1 로 켠다.
+SCRAPE_ON_START = os.getenv("SCRAPE_ON_START", "").strip() in ("1", "true", "yes")
+
 last_refresh: dict = {}
+
+
+def _collected_at() -> str:
+    """깃에 담겨온 자료의 수집 시각 (auto_notices.md 첫머리에 적혀 있다)."""
+    path = Path(__file__).resolve().parent.parent / "data" / "auto_notices.md"
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines()[:5]:
+            if "수집 시각" in line:
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
 
 
 async def _refresh_loop():
@@ -45,6 +65,12 @@ async def _refresh_loop():
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    global last_refresh
+    if not SCRAPE_ON_START:
+        last_refresh = {"source": "github-actions", "collected_at": _collected_at()}
+        log.info("자료는 저장소에 담겨온 것을 씁니다 (수집 시각 %s)", last_refresh["collected_at"])
+        yield
+        return
     task = asyncio.create_task(_refresh_loop())
     yield
     task.cancel()

@@ -1,0 +1,50 @@
+# 학교 홈페이지 자동 수집
+#
+# 웹서버는 더 이상 학교 홈페이지를 긁지 않는다. 대신 이 작업이 하루 두 번 긁어서
+# data/auto_*.md 를 저장소에 커밋하고, 그 커밋이 Render 재배포를 일으켜 최신 자료가 반영된다.
+#
+# 서버가 깰 때마다 긁으면(무료 플랜은 15분마다 잠듦) 학교 서버에 하루 1,000번 넘게
+# 요청하게 되는데, 공지는 하루 몇 건 올라오지 않으므로 전부 헛된 요청이다.
+name: 자료 수집
+
+on:
+  schedule:
+    # GitHub 의 cron 은 UTC 기준. 한국시간은 +9시간.
+    - cron: "0 23 * * *"   # 08:00 KST — 오늘 식단 확보
+    - cron: "0 10 * * *"   # 19:00 KST — 그날 업무시간에 올라온 공지 수집
+  workflow_dispatch:        # Actions 탭에서 손으로도 돌릴 수 있게
+
+# 동시에 두 번 돌면서 서로 충돌하지 않게
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # data/ 를 커밋해야 하므로
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 공지·학사일정·식단 수집
+        run: python -m app.scraper
+
+      - name: 바뀐 게 있으면 커밋
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/auto_*.md data/auto_*.json
+          if git diff --cached --quiet; then
+            echo "바뀐 자료 없음 — 커밋 생략"
+          else
+            git commit -m "chore: 학교 홈페이지 자료 자동 수집 ($(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M' ) KST)"
+            git push
+          fi
