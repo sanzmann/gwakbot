@@ -35,13 +35,44 @@ uvicorn app.main:app --reload
 
 브라우저에서 http://127.0.0.1:8000 접속.
 
+## 인터넷에 공개하기 (배포)
+
+GitHub 저장소를 [Render](https://render.com) 에 연결하면, `main` 에 푸시할 때마다 자동으로
+다시 배포되는 공개 주소(`https://이름.onrender.com`)가 생깁니다. 저장소에 `render.yaml` 이 들어 있어
+설정을 따로 입력할 필요가 없습니다.
+
+> GitHub Pages 로는 안 됩니다. Pages 는 정적 파일만 올릴 수 있는데, 곽봇은 `/api/chat` 을
+> 처리할 파이썬 서버와 (공개하면 안 되는) Groq 키가 필요합니다.
+
+1. 코드를 GitHub 에 올립니다 — `git push origin main`
+2. Render 가입 → **New ＞ Blueprint** → 곽봇 저장소 선택 → `render.yaml` 을 읽어 설정이 채워집니다
+3. `GROQ_API_KEY` 칸에 키를 붙여넣고 (`.env` 에 있는 값) **Apply**
+4. 몇 분 뒤 주소가 나오면 접속 — 첫 접속 때 학교 홈페이지 수집이 돌아 조금 느립니다
+5. 제보함은 `https://주소/admin/reports?token=토큰` — 토큰은 Render 대시보드의
+   Environment 탭에서 자동 생성된 `ADMIN_TOKEN` 값입니다 (토큰 없이 접속하면 404)
+
+### 공개 운영 시 알아둘 것
+- **사용량 제한**: 한 사람(IP)당 하루 40개·1분에 8개, 전체 하루 1500개까지 질문을 받습니다.
+  Groq 무료 한도를 한 명이 다 태우지 못하게 하는 장치입니다. `CHAT_LIMIT_PER_IP`,
+  `CHAT_LIMIT_TOTAL`, `CHAT_LIMIT_PER_MIN` 으로 조절합니다 (`/health` 에서 오늘 사용량 확인).
+- **무료 플랜은 15분간 접속이 없으면 잠듭니다.** 다음 접속자가 30초~1분 기다립니다.
+  (유료 플랜으로 올리거나, 그대로 두고 "처음엔 좀 느려요" 라고 안내해도 됩니다.)
+- **제보는 서버가 재시작되면 사라집니다** — 무료 플랜의 디스크는 임시 저장소입니다.
+  제보가 들어오면 제보함에서 바로 `data/` 에 반영하고, 그 변경을 깃에 커밋하세요.
+  (Render 의 유료 Persistent Disk 를 붙이면 보존됩니다.)
+- **자료 수정은 깃으로**: 공개 서버의 `data/` 에 추가한 내용도 재시작 때 사라지므로,
+  내 컴퓨터에서 고쳐 푸시하는 쪽이 안전합니다.
+- **학교 서버 인증서**: 학교 홈페이지가 중간 인증서를 보내주지 않아서, `certs/` 의 중간 인증서를
+  함께 신뢰 목록에 넣어 수집합니다 (`app/net.py`). 리눅스 서버에서도 그대로 동작합니다.
+
 ## 구조
 ```
 app/
   main.py       FastAPI 서버, /api/chat SSE 스트리밍, /api/home 홈 카드 데이터
   home.py       수집한 자료에서 홈 화면 요약 생성
   reports.py    학생 제보 저장·조회 (reports/reports.jsonl)
-  net.py        학교 서버 인증서 대응 (OS 인증서 저장소 사용)
+  limits.py     공개 운영용 사용량 제한 (IP당/전체 하루 질문 수)
+  net.py        학교 서버 인증서 대응 (certifi + certs/*.pem 묶음, 윈도우·리눅스 공통)
   bot.py        시스템 프롬프트 구성
   providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환, Groq 모델 폴백
   retrieval.py  질문 관련 자료 검색 (바이그램 + IDF)

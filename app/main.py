@@ -14,7 +14,7 @@ import os
 from html import escape
 from urllib.parse import urlencode
 
-from . import home, providers, reports, scraper
+from . import home, limits, providers, reports, scraper
 from .bot import stream_reply
 
 log = logging.getLogger("kwakbot")
@@ -80,7 +80,8 @@ async def index():
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "llm": providers.describe(), "last_refresh": last_refresh}
+    return {"ok": True, "llm": providers.describe(), "last_refresh": last_refresh,
+            "usage": limits.status()}
 
 
 @app.get("/api/home")
@@ -217,10 +218,24 @@ async def add_knowledge(request: Request,
     return _back(request, path.name)
 
 
+def _client_ip(request: Request) -> str:
+    """배포 환경에서는 프록시를 거치므로 X-Forwarded-For 의 첫 주소를 쓴다."""
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     if req.messages[-1].role != "user":
         raise HTTPException(400, "마지막 메시지는 user 여야 합니다.")
+
+    # 공개 운영: 한 사람이 무료 한도를 다 태우지 못하게 막는다
+    try:
+        limits.check(_client_ip(request))
+    except limits.LimitExceeded as e:
+        raise HTTPException(429, str(e))
 
     # 오래된 대화는 잘라서 토큰 낭비를 막는다
     history = [m.model_dump() for m in req.messages[-(MAX_HISTORY_TURNS * 2):]]

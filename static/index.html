@@ -951,7 +951,12 @@ async function send(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: history }),
     });
-    if (!res.ok) throw new Error('서버 오류 ' + res.status);
+    if (!res.ok) {
+      // 사용량 제한(429)은 서버가 보낸 안내 문구를 그대로 보여준다
+      let note = '서버 오류 ' + res.status;
+      try { note = (await res.json()).detail || note; } catch (e) {}
+      throw new Error(note);
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

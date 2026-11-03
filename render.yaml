@@ -1,0 +1,25 @@
+# Render 배포 설정 (Blueprint)
+# https://render.com 에서 이 저장소를 연결하면 이 파일을 읽어 자동으로 서버를 만든다.
+# GROQ_API_KEY 는 깃에 올리지 않고 Render 대시보드에서 직접 입력한다.
+services:
+  - type: web
+    name: kwakbot
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false        # 대시보드에서 직접 입력
+      - key: ADMIN_TOKEN
+        generateValue: true  # 제보함 접속용 비밀 토큰을 자동 생성
+      - key: CHAT_LIMIT_PER_IP
+        value: "40"
+      - key: CHAT_LIMIT_TOTAL
+        value: "1500"
