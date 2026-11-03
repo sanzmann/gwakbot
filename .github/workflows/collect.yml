@@ -24,6 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write      # data/ 를 커밋해야 하므로
+    env:
+      # 러너는 UTC 로 돈다. 자료에 적히는 '수집 시각' 이 홈 화면에 그대로 보이므로 한국시간으로 맞춘다.
+      TZ: Asia/Seoul
     steps:
       - uses: actions/checkout@v4
 
