@@ -1,5 +1,7 @@
 """곽봇 핵심: 시스템 프롬프트 구성과 LLM 호출."""
 from datetime import date
+
+from . import clock  # 한국 시간 기준 (서버는 UTC 로 돈다)
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -53,7 +55,7 @@ def build_system(query: str, prev_query: str = "") -> str:
     return SYSTEM_PROMPT.format(
         persona=load_persona(),
         knowledge=select_context(query, prev_query),
-        today=date.today().isoformat(),
+        today=clock.today().isoformat(),
     )
 
 

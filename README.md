@@ -84,6 +84,7 @@ app/
   home.py       수집한 자료에서 홈 화면 요약 생성
   reports.py    학생 제보 저장·조회 (reports/reports.jsonl)
   limits.py     공개 운영용 사용량 제한 (IP당/전체 하루 질문 수)
+  clock.py      한국 시간 기준 날짜 (배포 서버는 UTC 로 돌기 때문)
   net.py        학교 서버 인증서 대응 (certifi + certs/*.pem 묶음, 윈도우·리눅스 공통)
   bot.py        시스템 프롬프트 구성
   providers.py  LLM 백엔드 (groq / claude), .env 의 LLM_PROVIDER 로 전환, Groq 모델 폴백

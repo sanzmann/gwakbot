@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import threading
 from datetime import datetime, timedelta
+
+from . import clock  # 한국 시간 기준 (서버는 UTC 로 돈다)
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,7 +36,7 @@ KINDS = {
 
 
 def _too_many() -> bool:
-    now = datetime.now()
+    now = clock.now()
     _recent[:] = [t for t in _recent if now - t < timedelta(hours=1)]
     if len(_recent) >= RATE_LIMIT:
         return True
@@ -48,8 +50,8 @@ def add(kind: str, message: str, question: str = "", answer: str = "") -> dict:
         raise RuntimeError("제보가 너무 많이 들어왔어요. 잠시 후 다시 시도해주세요.")
 
     item = {
-        "id": datetime.now().strftime("%Y%m%d%H%M%S%f")[:18],
-        "at": datetime.now().isoformat(timespec="seconds"),
+        "id": clock.now().strftime("%Y%m%d%H%M%S%f")[:18],
+        "at": clock.now().isoformat(timespec="seconds"),
         "kind": kind if kind in KINDS else "idea",
         "message": message.strip()[:MAX_MESSAGE],
         "question": question.strip()[:MAX_CONTEXT],
@@ -116,7 +118,7 @@ def append_knowledge(text: str, filename: str = STUDENT_FILE) -> Path:
         "- 학교 홈페이지에 없는 현장 정보가 많으므로, 중요한 건 담당 부서 확인을 함께 안내하세요.\n\n"
     )
     path = DATA_DIR / filename
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = clock.now().strftime("%Y-%m-%d")
     with _lock:
         if not path.exists():
             path.write_text(header, encoding="utf-8", newline="\n")

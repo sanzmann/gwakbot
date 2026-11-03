@@ -347,3 +347,17 @@
 - `app/main.py`: 기본적으로 수집하지 않는다. `SCRAPE_ON_START=1` 일 때만 예전처럼 동작.
   `/health` 의 `last_refresh` 는 깃에 담겨온 자료의 수집 시각을 보여준다
 - 결과: 학교 서버 요청 하루 1,300+ → **90 (2회 고정)**. 깨어나는 것도 빨라졌다
+
+## 2026-11-03 — 배포 서버가 UTC 로 돌고 있었다
+- GitHub Actions 가 찍은 커밋 시각(22:04 KST)과 Render 가 기록한 수집 시각(12:42)이 9시간 차이.
+  배포 서버는 UTC 로 돈다 — `datetime.now()` 가 한국시간이 아니다
+- 지금 당장은 티가 안 나지만(양쪽 다 11/3) **한국시간 00~09시에는 서버가 아직 어제라고 생각한다.**
+  아침 8시에 '오늘 식단'을 물으면 어제 식단이 나오고, 홈 화면 날짜와 학사일정 D-day 도 하루씩 밀린다.
+  하필 아침 식단을 확인하는 시간대라 매일 터질 뻔했다
+- `app/clock.py` 추가: `ZoneInfo("Asia/Seoul")` 기준 `now()` / `today()`.
+  학생에게 보이는 날짜를 쓰는 곳(home, bot, limits, retrieval, reports)을 전부 이걸로 바꿨다.
+  수집기의 '수집 시각' 은 참고용이라 그대로 뒀다 (render.yaml 에 TZ=Asia/Seoul 로 보완)
+- 함정: 윈도우에는 IANA 시간대 DB 가 없어서 `ZoneInfo("Asia/Seoul")` 이 ZoneInfoNotFoundError 를 낸다.
+  `tzdata` 패키지를 requirements 에 추가해야 했다 (리눅스에서는 OS 것을 쓰므로 없어도 동작)
+- 검증: UTC 서버에서 한국시간 11/4 08:00 에 접속한 상황을 재현 →
+  고치기 전 '오늘' = 11-03(어제), 고친 후 = 11-04(정상)

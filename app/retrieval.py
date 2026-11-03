@@ -11,6 +11,8 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, timedelta
+
+from . import clock  # 한국 시간 기준 (서버는 UTC 로 돈다)
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -41,7 +43,7 @@ _RELATIVE_DAYS = {"오늘": 0, "금일": 0, "내일": 1, "낼": 1, "모레": 2, 
 
 
 def _expand_dates(query: str, today: date | None = None) -> str:
-    today = today or date.today()
+    today = today or clock.today()
     extra = []
     for word, delta in _RELATIVE_DAYS.items():
         if word in query:

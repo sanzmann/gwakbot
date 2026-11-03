@@ -13,6 +13,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.13.0"
+      - key: TZ
+        value: Asia/Seoul   # 서버 로그 시각용. 학생에게 보이는 날짜는 app/clock.py 가 따로 보장
       - key: LLM_PROVIDER
         value: groq
       - key: GROQ_API_KEY

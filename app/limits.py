@@ -13,6 +13,8 @@ import threading
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
+from . import clock  # 한국 시간 기준 (서버는 UTC 로 돈다)
+
 
 def _int_env(name: str, default: int) -> int:
     try:
@@ -26,7 +28,7 @@ TOTAL_DAILY = _int_env("CHAT_LIMIT_TOTAL", 1500)     # 전체 하루 질문 수
 PER_IP_MINUTE = _int_env("CHAT_LIMIT_PER_MIN", 8)    # 연타 방지
 
 _lock = threading.Lock()
-_day = date.today()
+_day = clock.today()
 _per_ip: dict[str, int] = defaultdict(int)
 _total = 0
 _recent: dict[str, list[datetime]] = defaultdict(list)
@@ -38,7 +40,7 @@ class LimitExceeded(Exception):
 
 def _roll_over() -> None:
     global _day, _total
-    today = date.today()
+    today = clock.today()
     if today != _day:
         _day = today
         _per_ip.clear()
@@ -51,7 +53,7 @@ def check(ip: str) -> None:
     global _total
     with _lock:
         _roll_over()
-        now = datetime.now()
+        now = clock.now()
 
         recent = [t for t in _recent[ip] if now - t < timedelta(minutes=1)]
         if len(recent) >= PER_IP_MINUTE:

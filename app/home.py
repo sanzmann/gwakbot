@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 import re
 from datetime import date
+
+from . import clock  # 한국 시간 기준 (서버는 UTC 로 돈다)
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -39,7 +41,7 @@ def _read(name: str) -> list[str]:
 
 def today_menu(today: date | None = None) -> list[dict]:
     """오늘 날짜에 해당하는 생활관 식당 식단 → [{식당, 대상, meals: {끼니: 내용}}]"""
-    today = today or date.today()
+    today = today or clock.today()
     out: list[dict] = []
     current: dict | None = None
     for line in _read("auto_menu.md"):
@@ -79,7 +81,7 @@ def recent_notices(limit: int = 6) -> list[dict]:
 
 def upcoming_schedule(limit: int = 6, today: date | None = None) -> list[dict]:
     """오늘 이후로 가장 가까운 학부 학사일정."""
-    today = today or date.today()
+    today = today or clock.today()
     items = []
     for line in _read("auto_calendar.md"):
         m = CAL_LINE.match(line)
@@ -129,7 +131,7 @@ def collected_at() -> str:
 
 
 def home_summary() -> dict:
-    today = date.today()
+    today = clock.today()
     return {
         "today": today.isoformat(),
         "weekday": WEEKDAYS[today.weekday()],

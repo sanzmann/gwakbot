@@ -11,4 +11,5 @@ python-dotenv==1.2.3
 python-multipart==0.0.33
 requests==2.34.2
 truststore==0.10.4
+tzdata==2026.6
 uvicorn==0.52.4
