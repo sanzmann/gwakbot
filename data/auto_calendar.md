@@ -1,5 +1,5 @@
 # 2026학년도 학사일정 (학교 홈페이지 자동 수집)
-- 수집 시각: 2026-11-03 13:03
+- 수집 시각: 2026-11-04 11:54
 - 학부 출처: https://www.seoultech.ac.kr/life/sch/common/ / 대학원 출처: https://www.seoultech.ac.kr/life/sch/grad/
 - 중간고사·기말고사 날짜는 공식 학사일정에 없음 (과목별 강의계획서 확인)
 
