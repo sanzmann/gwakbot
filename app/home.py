@@ -112,15 +112,25 @@ def upcoming_schedule(limit: int = 6, today: date | None = None) -> list[dict]:
     return unique[:limit]
 
 
-def technopark() -> dict | None:
-    """테크노파크 구내식당 주간 식단표 (이미지로 올라오므로 이미지 주소를 그대로 보여준다)."""
+def _menu_extra() -> dict:
+    """app/menu.py 가 남긴 화면용 자료 (테크노파크 식단표, 교내 식당 메뉴 목록)."""
     path = DATA_DIR / "auto_menu_extra.json"
     if not path.exists():
-        return None
+        return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8")).get("technopark")
+        return json.loads(path.read_text(encoding="utf-8"))
     except ValueError:
-        return None
+        return {}
+
+
+def technopark() -> dict | None:
+    """테크노파크 구내식당 주간 식단표 (이미지로 올라오므로 이미지 주소를 그대로 보여준다)."""
+    return _menu_extra().get("technopark")
+
+
+def menu_halls() -> list[dict]:
+    """제1·2학생회관 판매 메뉴 (브랜드·메뉴·가격·리뷰용 id). 리뷰 화면이 쓴다."""
+    return _menu_extra().get("halls", [])
 
 
 def collected_at() -> str:

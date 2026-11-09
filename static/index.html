@@ -203,8 +203,69 @@
   .tile img { width: 52px; height: 52px; object-fit: contain; object-position: top; }
   .tile b { font-size: 15px; letter-spacing: -.2px; margin-top: 5px; }
   .tile .sub { font-size: 11.5px; color: var(--muted); }
-  .tile.bot { background: linear-gradient(170deg, var(--accent-soft), var(--panel)); }
-  .tile.bot b { color: var(--accent); font-size: 17px; letter-spacing: .5px; }
+  .botrow { grid-template-columns: 1fr; margin-top: 13px; }
+  .tile.bot { background: linear-gradient(100deg, var(--accent-soft), var(--panel));
+    flex-direction: row; justify-content: center; gap: 12px; padding: 14px 12px; }
+  .tile.bot img { width: 44px; height: 44px; }
+  .tile.bot b { color: var(--accent); font-size: 18px; letter-spacing: .5px; margin: 0; }
+  .tile.bot .sub { font-size: 12.5px; }
+
+  /* ── 학생회관 식당: 메뉴 목록과 별점 ── */
+  .halltabs { display: flex; gap: 6px; padding: 2px 16px 10px; flex-wrap: wrap; }
+  .halltabs button { font-size: 12.5px; font-family: inherit; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted); border-radius: 999px; padding: 6px 13px; cursor: pointer; }
+  .halltabs button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent);
+    border-color: transparent; font-weight: 700; }
+  .brandname { font-size: 12px; color: var(--muted); font-weight: 700; padding: 12px 16px 5px; }
+  .mlist { list-style: none; margin: 0; padding: 0 16px; }
+  .mlist li { border-top: 1px solid var(--border); }
+  .mlist li:first-child { border-top: none; }
+  .mrow { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 2px;
+    background: none; border: none; color: var(--text); font-family: inherit; cursor: pointer; text-align: left; }
+  .mrow:hover .mname { color: var(--accent); }
+  .mrow .mname { font-size: 14px; flex: 1; line-height: 1.4; }
+  .mrow .mprice { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .mrow .mscore { font-size: 12px; color: var(--muted); white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+  .mrow .mscore b { color: #f5a623; font-weight: 700; }
+  .mrow .mine { color: var(--accent); font-weight: 700; }
+  .mrow .rank { font-size: 12px; color: var(--muted); font-weight: 700; min-width: 20px;
+    text-align: center; flex: none; }
+  .mrow .rank.top { color: #f5a623; font-size: 14px; }
+  .mrow .mname { display: flex; flex-direction: column; gap: 2px; }
+  .mrow .msub { font-size: 11.5px; color: var(--muted); }
+
+  /* 별 표시: 회색 별 위에 금색 별을 너비로 잘라 얹어 0.5점을 정확히 그린다 */
+  .stars { position: relative; display: inline-block; line-height: 1; white-space: nowrap;
+    font-size: 15px; letter-spacing: 1px; }
+  .stars .base { color: var(--border); }
+  .stars .fill { position: absolute; left: 0; top: 0; overflow: hidden; color: #f5a623; }
+  .stars.big { font-size: 34px; letter-spacing: 4px; }
+
+  /* 별점 고르기: 별 위에 반 칸짜리 버튼 10개를 겹쳐 둔다 */
+  .starpick { position: relative; display: inline-block; }
+  .starpick .hit { position: absolute; top: 0; height: 100%; width: 10%; padding: 0;
+    background: none; border: none; cursor: pointer; }
+  .starpick .hit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .rv { padding: 0 16px 4px; }
+  .rv .back { background: none; border: none; color: var(--accent); font-family: inherit;
+    font-size: 13px; cursor: pointer; padding: 2px 0 10px; }
+  .rv h4 { margin: 0 0 2px; font-size: 16px; }
+  .rv .sub2 { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }
+  .rv .pickbox { text-align: center; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px 12px 14px; }
+  .rv .picked { margin-top: 8px; font-size: 13px; color: var(--muted); min-height: 18px; }
+  .rv .picked b { color: #f5a623; font-size: 15px; }
+  .rv form { display: flex; gap: 7px; margin-top: 12px; }
+  .rv input { flex: 1; min-width: 0; padding: 10px 13px; border: 1px solid var(--border);
+    border-radius: 11px; font: 14px inherit; background: var(--panel); color: var(--text); }
+  .rv button.send { background: var(--accent); color: #fff; border: none; border-radius: 11px;
+    padding: 0 16px; font: 600 14px inherit; cursor: pointer; white-space: nowrap; }
+  .rv button.send:disabled { opacity: .45; cursor: default; }
+  .rv .note { margin: 9px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+  .rv .rlist { list-style: none; margin: 16px 0 0; padding: 0; }
+  .rv .rlist li { border-top: 1px solid var(--border); padding: 10px 0; font-size: 13.5px; line-height: 1.5; }
+  .rv .rlist .when { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
 
   /* 타일을 눌렀을 때 뜨는 정보창 */
   #panelDlg { width: min(94vw, 560px); }
@@ -287,10 +348,14 @@
       <span class="ico">📢</span><b>공지사항</b><span class="sub">새로 올라온 글</span></button>
     <button class="tile" type="button" data-panel="schedule">
       <span class="ico">📅</span><b>학사일정</b><span class="sub">다가오는 일정</span></button>
+    <button class="tile" type="button" data-panel="hall">
+      <span class="ico">🍜</span><b>학생회관 식당</b><span class="sub">메뉴 보고 별점 주기</span></button>
     <button class="tile" type="button" data-panel="link">
       <span class="ico">🔗</span><b>자주 가는 곳</b><span class="sub">바로가기 모음</span></button>
     <button class="tile" type="button" data-panel="map">
       <span class="ico">🗺️</span><b>캠퍼스 지도</b><span class="sub">건물 위치 찾기</span></button>
+  </div>
+  <div class="tiles botrow">
     <button class="tile bot" type="button" data-panel="bot">
       <img src="/static/img/kwakbot.png" alt=""><b>BOT</b><span class="sub">무엇이든 물어보세요</span></button>
   </div>
@@ -1009,6 +1074,255 @@ function linkCard(items) {
   return box;
 }
 
+// ---- 학생회관 식당: 메뉴 목록과 별점·한줄평 ----
+// 로그인이 없으므로 '내 리뷰' 는 이 브라우저가 기억하는 임의의 id 로 구분한다.
+// 지워지면 '내 별점' 표시만 사라질 뿐, 남긴 리뷰 자체는 그대로 남는다.
+function clientId() {
+  try {
+    let v = localStorage.getItem('kwakbot-client');
+    if (!v) {
+      v = 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('kwakbot-client', v);
+    }
+    return v;
+  } catch (e) {
+    return 'c-temp-' + Date.now().toString(36);   // 저장을 막아둔 브라우저
+  }
+}
+const CLIENT = clientId();
+
+let HALLS = null, STATS = {}, MINE = {}, hallIdx = 0;
+let sortMode = 'rating';   // rating(별점순) | count(리뷰많은순) | menu(메뉴판순)
+
+const wonText = price => Number(String(price).replace(/,/g, '')).toLocaleString() + '원';
+
+// 회색 별 위에 금색 별을 너비로 잘라 얹는다 — 0.5점이 정확히 반 칸으로 보인다
+function starsEl(rating, big) {
+  const box = el('span', 'stars' + (big ? ' big' : ''));
+  box.append(el('span', 'base', '★★★★★'));
+  const fill = el('span', 'fill', '★★★★★');
+  fill.style.width = (rating / 5 * 100) + '%';
+  box.append(fill);
+  return box;
+}
+
+function scoreEl(id) {
+  const st = STATS[id];
+  const wrap = el('span', 'mscore');
+  if (st) wrap.append(el('b', null, '★ ' + st.avg.toFixed(1)), el('span', null, '(' + st.count + ')'));
+  else wrap.append(el('span', null, '★ –'));
+  if (MINE[id] != null) wrap.append(el('span', 'mine', ' · 내 ' + MINE[id]));
+  return wrap;
+}
+
+// 지금 보고 있는 식당의 메뉴 (마지막 칸은 '전체' = 두 식당 합쳐 보기)
+function currentItems() {
+  if (hallIdx >= HALLS.length) {
+    return HALLS.flatMap(h => h.items.map(it => ({ ...it, hall: h.name })));
+  }
+  return HALLS[hallIdx].items.map(it => ({ ...it, hall: HALLS[hallIdx].name }));
+}
+
+function chipRow(options, current, onPick) {
+  const row = el('div', 'halltabs');
+  options.forEach(([value, label]) => {
+    const b = el('button', null, label);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(value === current));
+    b.addEventListener('click', () => onPick(value));
+    row.append(b);
+  });
+  return row;
+}
+
+function menuRow(it, rank) {
+  const row = el('button', 'mrow');
+  row.type = 'button';
+  if (rank) row.append(el('span', 'rank' + (rank <= 3 ? ' top' : ''), String(rank)));
+  const name = el('span', 'mname');
+  name.append(el('span', null, it.name));
+  // 별점순으로 볼 때는 어느 식당·브랜드인지 한 줄 밑에 적어준다
+  if (rank) name.append(el('span', 'msub', it.hall + ' · ' + it.brand));
+  row.append(name, el('span', 'mprice', wonText(it.price)), scoreEl(it.id));
+  row.addEventListener('click', () => showReview(it));
+  const li = el('li');
+  li.append(row);
+  return li;
+}
+
+function hallView() {
+  const box = el('div');
+
+  const halls = HALLS.map((h, i) => [i, h.name]);
+  halls.push([HALLS.length, '전체']);
+  box.append(chipRow(halls, hallIdx, v => { hallIdx = v; showHall(); }));
+  box.append(chipRow([['rating', '⭐ 별점순'], ['count', '🔥 리뷰 많은 순'], ['menu', '메뉴판 순']],
+                     sortMode, v => { sortMode = v; showHall(); }));
+
+  const items = currentItems();
+  const rated = items.filter(it => STATS[it.id]).length;
+
+  if (sortMode === 'menu') {
+    let brand = null, list = null;
+    for (const it of items) {
+      const head = (hallIdx >= HALLS.length ? it.hall + ' · ' : '') + it.brand;
+      if (head !== brand) {
+        brand = head;
+        box.append(el('div', 'brandname', head));
+        list = el('ul', 'mlist');
+        box.append(list);
+      }
+      list.append(menuRow(it, 0));
+    }
+    return box;
+  }
+
+  // 별점순 / 리뷰 많은 순 — 아직 아무도 안 매긴 메뉴는 뒤로 보낸다
+  const key = sortMode === 'rating'
+    ? it => [STATS[it.id] ? STATS[it.id].avg : -1, STATS[it.id] ? STATS[it.id].count : 0]
+    : it => [STATS[it.id] ? STATS[it.id].count : -1, STATS[it.id] ? STATS[it.id].avg : 0];
+  const sorted = [...items].sort((a, b) => {
+    const ka = key(a), kb = key(b);
+    return kb[0] - ka[0] || kb[1] - ka[1];
+  });
+
+  box.append(el('div', 'brandname',
+    rated ? (sortMode === 'rating' ? '별점이 높은 메뉴부터' : '리뷰가 많은 메뉴부터')
+          : '아직 별점이 없어요 — 먹어봤다면 첫 별점을 남겨주세요'));
+  const list = el('ul', 'mlist');
+  sorted.forEach((it, i) => list.append(menuRow(it, i + 1)));
+  box.append(list);
+  return box;
+}
+
+function showHall() {
+  panelTitle.textContent = '🍜 학생회관 식당';
+  panelBody.replaceChildren(hallView());
+  panelBody.scrollTop = 0;
+}
+
+function reviewListItems(list, items) {
+  list.replaceChildren(...items.map(rv => {
+    const li = el('li');
+    li.append(starsEl(rv.rating), el('span', null, ' ' + rv.comment), el('span', 'when', rv.at));
+    return li;
+  }));
+}
+
+function loadReviews(itemId, list) {
+  fetch('/api/menu/' + itemId + '/reviews')
+    .then(r => r.json())
+    .then(d => reviewListItems(list, d.reviews))
+    .catch(() => {});
+}
+
+// 메뉴 하나에 별점 주기 + 한줄평 남기기
+function showReview(item) {
+  panelTitle.textContent = '별점 남기기';
+  const box = el('div', 'rv');
+
+  const back = el('button', 'back', '← 메뉴 목록');
+  back.type = 'button';
+  back.addEventListener('click', showHall);
+  box.append(back, el('h4', null, item.name),
+             el('p', 'sub2', HALLS[hallIdx].name + ' · ' + item.brand + ' · ' + wonText(item.price)));
+
+  // 별점 고르기 — 별 위에 반 칸짜리 투명 버튼 10개를 겹쳐 둔다
+  let picked = MINE[item.id] || 0;
+  const pickbox = el('div', 'pickbox');
+  const pick = el('span', 'starpick');
+  const shown = starsEl(picked, true);
+  pick.append(shown);
+  const label = el('div', 'picked');
+
+  const paint = v => {
+    shown.querySelector('.fill').style.width = (v / 5 * 100) + '%';
+    label.replaceChildren(v ? el('b', null, v.toFixed(1) + '점')
+                            : el('span', null, '별을 눌러 점수를 주세요'));
+  };
+
+  const form = el('form');
+  const input = el('input');
+  input.type = 'text';
+  input.maxLength = 80;
+  input.placeholder = '한줄평 (선택) 예: 양 많고 가성비 좋아요';
+  const send = el('button', 'send', '남기기');
+  send.type = 'submit';
+  send.disabled = !picked;
+
+  for (let i = 1; i <= 10; i++) {
+    const v = i / 2;
+    const hit = el('button', 'hit');
+    hit.type = 'button';
+    hit.style.left = ((i - 1) * 10) + '%';
+    hit.setAttribute('aria-label', v + '점');
+    hit.addEventListener('mouseenter', () => paint(v));
+    hit.addEventListener('focus', () => paint(v));
+    hit.addEventListener('click', () => { picked = v; paint(v); send.disabled = false; });
+    pick.append(hit);
+  }
+  pick.addEventListener('mouseleave', () => paint(picked));
+  pickbox.append(pick, label);
+  box.append(pickbox);
+
+  form.append(input, send);
+  box.append(form);
+  box.append(el('p', 'note', '누구나 볼 수 있어요. 이름·학번은 저장하지 않습니다. '
+                           + '같은 메뉴에 다시 남기면 이전 것을 대신합니다.'));
+
+  const rlist = el('ul', 'rlist');
+  box.append(rlist);
+  loadReviews(item.id, rlist);
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!picked) return;
+    send.disabled = true;
+    try {
+      const res = await fetch('/api/menu/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: item.id, rating: picked,
+                               comment: input.value.trim(), client: CLIENT }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || '저장하지 못했어요.');
+      STATS[item.id] = data.stats;
+      MINE[item.id] = picked;
+      paint(picked);
+      label.append(el('span', null, ' · 고마워요! 😊'));
+      input.value = '';
+      loadReviews(item.id, rlist);
+    } catch (err) {
+      label.replaceChildren(el('span', null, err.message));
+    }
+    send.disabled = false;
+  });
+
+  panelBody.replaceChildren(box);
+  panelBody.scrollTop = 0;
+  paint(picked);
+}
+
+function openHallPanel() {
+  const start = () => { showHall(); panelDlg.showModal(); };
+  if (HALLS) return start();
+  fetch('/api/menu?client=' + encodeURIComponent(CLIENT))
+    .then(r => r.json())
+    .then(d => {
+      HALLS = d.halls || [];
+      STATS = d.stats || {};
+      MINE = d.mine || {};
+      if (!HALLS.length) throw new Error('메뉴 없음');
+      start();
+    })
+    .catch(() => {
+      panelTitle.textContent = '🍜 학생회관 식당';
+      panelBody.replaceChildren(el('div', 'empty', '메뉴를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'));
+      panelDlg.showModal();
+    });
+}
+
 // ---- 타일을 누르면 해당 정보를 창으로 보여준다 ----
 let HOME = null;
 const panelDlg = document.getElementById('panelDlg');
@@ -1025,6 +1339,7 @@ const PANELS = {
 
 function openPanel(kind) {
   if (kind === 'map') return openMapDialog(null);
+  if (kind === 'hall') return openHallPanel();
   if (kind === 'bot') return showView('chat');
   if (!HOME) return;
   const [title, content] = PANELS[kind]();

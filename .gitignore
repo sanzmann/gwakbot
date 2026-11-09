@@ -8,3 +8,4 @@ __pycache__/
 # 서버는 깨어나자마자 이 파일로 답한다 (.github/workflows/collect.yml)
 _t.py
 reports/
+reviews/

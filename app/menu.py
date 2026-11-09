@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -38,6 +39,19 @@ NOTION_PAGE = "https://fern-magic-bde.notion.site/21e45244ac0a80fdb02ad064ce75d6
 NOTION_SPACE = "5a939ea0-b332-4365-96e0-413703544878"
 NOTION_DBS = [("ST:Table 제1학생회관(37번) 학생 제1식당", "22345244-ac0a-8062-86bd-000b564de5f4", "22345244-ac0a-807c-ad39-000c423759b5"),
               ("ST:Dining 제2학생회관(52번) 학생 제2식당", "22345244-ac0a-801b-8ee1-000b50d50c14", "22345244-ac0a-8001-8c7e-000c2da02c00")]
+# 화면에 쓸 짧은 이름 (긴 제목을 그대로 띄우면 버튼이 넘친다)
+HALL_SHORT = {"ST:Table 제1학생회관(37번) 학생 제1식당": "제1학생회관 ST:Table",
+              "ST:Dining 제2학생회관(52번) 학생 제2식당": "제2학생회관 ST:Dining"}
+
+
+def menu_item_id(hall: str, brand: str, name: str) -> str:
+    """메뉴 한 가지를 가리키는 고정 id. 리뷰를 이 id 에 붙인다.
+
+    가격이 바뀌어도 리뷰가 떨어져 나가지 않도록 가격은 넣지 않는다.
+    메뉴 이름 자체가 바뀌면 id 도 바뀌어 그 메뉴의 리뷰는 보이지 않게 된다.
+    """
+    key = f"{hall}|{brand}|{name}"
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:10]
 
 # 교내 서울테크노파크(7번 건물) 구내식당 — 주간 식단표를 이미지로 올린다
 TP_BOARD = "https://www.seoultp.or.kr/user/nd70791.do"
@@ -183,6 +197,7 @@ def refresh_menu() -> dict:
             summary["days"] += 1
         summary["dorms"] += 1
 
+    halls = []            # 화면·리뷰용 메뉴 목록
     for title, cid, vid in NOTION_DBS:
         lines.append("")
         try:
@@ -195,6 +210,13 @@ def refresh_menu() -> dict:
         for brand, name, price in rows:
             lines.append(f"- {title} {brand} | {name} | {price}원")
         summary["menus"] += len(rows)
+        halls.append({
+            "name": HALL_SHORT.get(title, title),
+            "full": title,
+            "items": [{"id": menu_item_id(title, brand, name),
+                       "brand": brand, "name": name, "price": price}
+                      for brand, name, price in rows],
+        })
 
     lines.append("")
     try:
@@ -210,7 +232,7 @@ def refresh_menu() -> dict:
     else:
         lines.append(f"- 테크노파크 식당 주간 식단표는 {TP_BOARD} 에 이미지로 올라옵니다.")
     summary["technopark"] = tp
-    OUT_JSON.write_text(json.dumps({"technopark": tp}, ensure_ascii=False, indent=1),
+    OUT_JSON.write_text(json.dumps({"technopark": tp, "halls": halls}, ensure_ascii=False, indent=1),
                         encoding="utf-8", newline="\n")
 
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")

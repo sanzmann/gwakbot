@@ -14,7 +14,7 @@ import os
 from html import escape
 from urllib.parse import urlencode
 
-from . import home, limits, providers, reports, scraper
+from . import home, limits, providers, reports, reviews, scraper
 from .bot import stream_reply
 
 log = logging.getLogger("kwakbot")
@@ -88,6 +88,13 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
 
 
+class ReviewRequest(BaseModel):
+    item: str = Field(min_length=1, max_length=40)
+    rating: float = Field(ge=0.5, le=5.0)
+    comment: str = Field(default="", max_length=reviews.MAX_COMMENT)
+    client: str = Field(min_length=8, max_length=40)
+
+
 class ReportRequest(BaseModel):
     kind: str = Field(default="idea", max_length=20)
     message: str = Field(min_length=2, max_length=reports.MAX_MESSAGE)
@@ -114,6 +121,28 @@ async def health():
 async def home_summary():
     """홈 화면 카드에 쓸 요약 (오늘 식단·최근 공지·다가오는 일정·바로가기)."""
     return home.home_summary()
+
+
+@app.get("/api/menu")
+async def menu_items(client: str = ""):
+    """교내 식당(제1·2학생회관) 판매 메뉴 + 별점 평균. 리뷰 화면이 쓴다."""
+    return {"halls": home.menu_halls(), "stats": reviews.stats(),
+            "mine": reviews.mine(client) if client else {}}
+
+
+@app.get("/api/menu/{item_id}/reviews")
+async def menu_reviews(item_id: str):
+    return {"reviews": reviews.for_item(item_id)}
+
+
+@app.post("/api/menu/review")
+async def add_review(req: ReviewRequest, request: Request):
+    """별점·한줄평 등록. 같은 사람이 같은 메뉴에 다시 남기면 덮어쓴다."""
+    try:
+        reviews.add(req.item, req.rating, req.comment, req.client, _client_ip(request))
+    except reviews.ReviewError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "stats": reviews.stats().get(req.item, {"count": 0, "avg": 0})}
 
 
 @app.post("/api/report")
@@ -230,6 +259,42 @@ async def apply_report(report_id: str, request: Request,
     reports.mark_done(report_id, True)
     log.info("제보 반영: %s → %s", report_id, path.name)
     return _back(request, path.name)
+
+
+@app.post("/admin/reviews/{review_id}/delete")
+async def delete_review(review_id: str, request: Request):
+    """부적절한 한줄평을 지운다."""
+    _check_admin(request)
+    reviews.remove(review_id)
+    return RedirectResponse(f"/admin/reviews{_token_qs(request)}", status_code=303)
+
+
+@app.get("/admin/reviews", response_class=HTMLResponse)
+async def admin_reviews(request: Request):
+    _check_admin(request)
+    qs = _token_qs(request)
+    names = {it["id"]: f"{h['name']} · {it['brand']} {it['name']}"
+             for h in home.menu_halls() for it in h["items"]}
+    rows = []
+    for it in reviews.all_items():
+        rows.append(
+            f"<li><div class=meta>{it['at'][:16].replace('T', ' ')} · ★{it['rating']}"
+            f"<form method=post action='/admin/reviews/{it['id']}/delete{qs}'>"
+            f"<button>삭제</button></form></div>"
+            f"<div class=msg><b>{escape(names.get(it['item'], it['item']))}</b><br>"
+            f"{escape(it['comment']) or '<i>별점만</i>'}</div></li>")
+    s = reviews.summary()
+    return f"""<!DOCTYPE html><html lang=ko><head><meta charset=utf-8>
+<title>곽봇 식당 리뷰</title><style>
+body{{font-family:-apple-system,'Malgun Gothic',sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#1b2230}}
+h1{{font-size:20px}} ul{{list-style:none;padding:0}}
+li{{border:1px solid #e2e7ef;border-radius:12px;padding:12px 14px;margin:10px 0}}
+.meta{{display:flex;gap:10px;align-items:center;font-size:12px;color:#6b7687}}
+.meta form{{margin-left:auto}} .msg{{margin-top:6px;white-space:pre-wrap;font-size:14px}}
+button{{font-size:12px;padding:4px 10px;border:1px solid #cfd7e3;background:#fff;border-radius:999px;cursor:pointer}}
+</style></head><body><h1>곽봇 식당 리뷰</h1>
+<p>전체 {s['total']}건 · 한줄평 {s['with_comment']}건 · <a href="/admin/reports{qs}">제보함</a></p>
+<ul>{''.join(rows) or '<li>아직 리뷰가 없어요.</li>'}</ul></body></html>"""
 
 
 @app.post("/admin/knowledge")
