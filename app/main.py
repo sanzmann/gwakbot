@@ -63,9 +63,13 @@ async def _refresh_loop():
         await asyncio.sleep(REFRESH_INTERVAL_SEC)
 
 
+review_store = "?"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global last_refresh
+    global last_refresh, review_store
+    review_store = await asyncio.to_thread(reviews.setup)
     if not SCRAPE_ON_START:
         last_refresh = {"source": "github-actions", "collected_at": _collected_at()}
         log.info("자료는 저장소에 담겨온 것을 씁니다 (수집 시각 %s)", last_refresh["collected_at"])
@@ -114,7 +118,7 @@ async def index():
 @app.get("/health")
 async def health():
     return {"ok": True, "llm": providers.describe(), "last_refresh": last_refresh,
-            "usage": limits.status()}
+            "usage": limits.status(), "reviews": review_store}
 
 
 @app.get("/api/home")
