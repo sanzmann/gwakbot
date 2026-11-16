@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>곽봇 - 서울과기대 챗봇</title>
 <link rel="icon" type="image/png" href="/static/img/favicon.png">
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
 <style>
   :root {
     --bg: #eef3fa; --bg2: #e3ecf8; --panel: #ffffff; --text: #1b2230; --muted: #6b7687;
@@ -170,6 +176,22 @@
   .binfo .moreBtn { margin-top: 10px; width: 100%; background: var(--accent-soft); color: var(--accent);
     border: none; border-radius: 9px; padding: 7px 10px; font-size: 12.5px; font-family: inherit; cursor: pointer; }
   .binfo .moreBtn:hover { filter: brightness(.96); }
+  /* 3D 지도 (static/map3d.js) */
+  .map3d { position: relative; width: 100%; height: min(72vh, max(60vw, 430px)); overflow: hidden;
+    touch-action: none; background: linear-gradient(180deg, #bfdcff 0%, #e9f3ff 70%, #f6f9ff 100%); }
+  .map3d canvas { width: 100%; height: 100%; display: block; outline: none; }
+  .map3d .zoomhint { top: 10px; bottom: auto; max-width: calc(100% - 24px); }   /* 아래쪽 버튼과 겹치지 않게 위로 */
+  .maptip { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; white-space: nowrap;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 11px; font-size: 12.5px; font-weight: 600; box-shadow: var(--shadow); opacity: 0; transition: opacity .12s; }
+  .maptip.show { opacity: 1; }
+  .modebtn { font-size: 12px; font-family: inherit; color: var(--accent); background: var(--accent-soft);
+    border: none; border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+  dialog .head .modebtn:not([hidden]) + .close { margin-left: 2px; }
+  dialog .head .modebtn { margin-left: auto; }
+  @media (prefers-color-scheme: dark) {
+    .map3d { background: linear-gradient(180deg, #0a1120 0%, #131c30 70%, #1a2438 100%); }
+  }
   .zoomhint { position: absolute; left: 12px; bottom: 14px; z-index: 3; font-size: 11.5px; color: var(--muted);
     background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; opacity: .92; }
 
@@ -190,6 +212,24 @@
     .brand .dark-only { display: block; }
   }
   .brand p { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+
+  /* ── 3D 홈 무대 (static/home3d.js). 켜지면 #home 에 is3d 가 붙고, 타일은 화면 밖으로 물러난다 ── */
+  #stage3d { display: none; }
+  #home.is3d { padding: 0; max-width: none; overflow: hidden; position: relative; }
+  #home.is3d #stage3d { display: block; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 60% 52% at 50% 54%, var(--accent-soft), transparent 72%); }
+  #stage3d canvas { width: 100%; height: 100%; display: block; }
+  #stageTip { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; white-space: nowrap;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 12px; font-size: 12.5px; font-weight: 600; box-shadow: var(--shadow);
+    opacity: 0; transition: opacity .15s; }
+  #stageTip.show { opacity: 1; }
+  #home.is3d .brand { position: absolute; left: 0; right: 0; top: 0; z-index: 2; padding: 14px 0 0; pointer-events: none; }
+  #home.is3d .brand .logo { width: min(210px, 50%); }
+  #home.is3d .brand p { margin-top: 6px; font-size: 12.5px; }
+  #home.is3d .stamp { position: absolute; left: 0; right: 0; bottom: 2px; z-index: 2; padding: 0; pointer-events: none; }
+  /* 타일은 키보드·화면낭독기용으로 남겨 두되 눈에는 보이지 않게 */
+  #home.is3d .tiles { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
   /* 아이콘 타일 — 누르면 해당 정보가 뜬다 */
   .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
@@ -336,6 +376,7 @@
 </header>
 
 <div id="home">
+  <div id="stage3d" aria-hidden="true"><div id="stageTip"></div></div>
   <div class="brand">
     <img class="logo light-only" src="/static/img/seoultech-logo-color.svg" alt="서울과학기술대학교">
     <img class="logo dark-only" src="/static/img/seoultech-logo-white.svg" alt="서울과학기술대학교">
@@ -400,9 +441,21 @@
   <div class="head">
     <strong>캠퍼스 지도</strong>
     <a href="https://www.seoultech.ac.kr/intro/map/" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent)">학교 지도</a>
+    <button class="modebtn" id="mapModeBtn" type="button" hidden>평면으로 보기</button>
     <button class="close" type="button" aria-label="닫기">✕</button>
   </div>
   <div class="body">
+    <div class="map3d" id="map3d" hidden>
+      <div class="maptip" id="map3dTip"></div>
+      <span class="zoomhint">핀을 누르면 건물 정보 · 끌어서 이동 · 휠로 확대 · 오른쪽 버튼(두 손가락)으로 회전</span>
+      <div class="zoomctl">
+        <button type="button" data-m3="left" aria-label="왼쪽으로 돌리기">↶</button>
+        <button type="button" data-m3="right" aria-label="오른쪽으로 돌리기">↷</button>
+        <button type="button" data-m3="out" aria-label="축소">−</button>
+        <button type="button" data-m3="in" aria-label="확대">＋</button>
+        <button type="button" data-m3="reset" aria-label="처음 시점으로">⟲</button>
+      </div>
+    </div>
     <div class="zoomwrap" id="mapZoom">
       <div class="pz">
         <div class="frame" id="mapDlgFrame"></div>
@@ -654,8 +707,8 @@ const dlgFrame = document.getElementById('mapDlgFrame');
 const mapZoomEl = document.getElementById('mapZoom');
 
 // 지도에서 누른 지점과 가장 가까운 건물 핀을 찾아 정보 카드를 띄운다
-function showBuildingInfo(b) {
-  mapZoomEl.querySelector('.binfo')?.remove();
+function showBuildingInfo(b, host = mapZoomEl) {
+  host.querySelector('.binfo')?.remove();
   const box = el('div', 'binfo');
   const close = el('button', 'close2', '✕');
   close.type = 'button';
@@ -687,7 +740,7 @@ function showBuildingInfo(b) {
     });
     box.append(toggle, list);
   }
-  mapZoomEl.append(box);
+  host.append(box);
 }
 
 function pickBuilding(cx, cy, content) {
@@ -706,18 +759,73 @@ function pickBuilding(cx, cy, content) {
 
 const mapPanZoom = makePanZoom(mapZoomEl, { onTap: pickBuilding });
 
-function openMapDialog(pins) {
-  if (!MAP) return;
-  const marked = pins && pins.length;
+// ---- 3D 지도 (static/map3d.js). 못 쓰는 환경(WebGL 없음, 불러오기 실패)이면 평면 지도로 보여준다 ----
+const map3dEl = document.getElementById('map3d');
+const map3dTip = document.getElementById('map3dTip');
+const mapModeBtn = document.getElementById('mapModeBtn');
+let map3d = null, map3dOn = true, mapPins = null;
+window.KWAK_MAP3D = null;          // 페이지 아래 모듈 스크립트가 준비되면 채운다
+
+function drawFlatMap() {
+  const marked = mapPins && mapPins.length;
   dlgFrame.replaceChildren(mapImage());
-  renderPins(dlgFrame, marked ? pins : MAP.buildings, { label: !!marked, ping: !!marked });
-  mapZoomEl.querySelector('.binfo')?.remove();
-  dlg.showModal();
+  renderPins(dlgFrame, marked ? mapPins : MAP.buildings, { label: !!marked, ping: !!marked });
   mapPanZoom.reset();
   // 지도 이미지가 아직 로드되지 않았으면 높이를 알 수 없으므로 로드 후 한 번 더 맞춘다
   const mapImg = dlgFrame.querySelector('img');
   if (mapImg && !mapImg.complete) mapImg.addEventListener('load', mapPanZoom.reset, { once: true });
 }
+
+async function showMapMode() {
+  if (map3dOn && window.KWAK_MAP3D && !map3d) {
+    map3dEl.hidden = false;        // 크기를 잴 수 있게 먼저 펼친다
+    mapZoomEl.hidden = true;
+    try {
+      map3d = await window.KWAK_MAP3D({
+        host: map3dEl, map: MAP,
+        onPick: b => showBuildingInfo(b, map3dEl),
+        onHover: (b, x, y) => {
+          map3dTip.classList.toggle('show', !!b);
+          if (b) {
+            map3dTip.textContent = `${b.num}번 ${b.name}`;
+            map3dTip.style.transform = `translate(-50%, -100%) translate(${x}px, ${y - 16}px)`;
+          }
+        },
+      });
+    } catch (e) {
+      console.warn('3D 지도를 켜지 못해 평면 지도로 보여줍니다.', e);
+      window.KWAK_MAP3D = null;
+    }
+  }
+  const use3d = map3dOn && !!map3d;
+  map3dEl.hidden = !use3d;
+  mapZoomEl.hidden = use3d;
+  mapModeBtn.hidden = !map3d;
+  mapModeBtn.textContent = use3d ? '평면으로 보기' : '3D로 보기';
+  dlg.querySelectorAll('.binfo').forEach(n => n.remove());
+  if (!dlg.open) return;           // 준비하는 사이에 창을 닫았다
+  if (use3d) map3d.open(mapPins);
+  else { map3d?.close(); drawFlatMap(); }
+}
+
+function openMapDialog(pins) {
+  if (!MAP) return;
+  mapPins = pins && pins.length ? pins : null;
+  dlg.showModal();
+  showMapMode();
+}
+mapModeBtn.addEventListener('click', () => { map3dOn = !map3dOn; showMapMode(); });
+map3dEl.addEventListener('click', e => {
+  const act = e.target.closest('[data-m3]')?.dataset.m3;
+  if (!act || !map3d) return;
+  if (act === 'in') map3d.zoom(0.7);
+  else if (act === 'out') map3d.zoom(1.4);
+  else if (act === 'left') map3d.rotate(-0.4);
+  else if (act === 'right') map3d.rotate(0.4);
+  else map3d.reset();
+});
+// close 이벤트는 한 박자 늦게 오므로, 그 사이 다시 열렸으면 멈추지 않는다
+dlg.addEventListener('close', () => { if (!dlg.open) map3d?.close(); });
 document.getElementById('mapBtn').addEventListener('click', () => openMapDialog(null));
 dlg.querySelector('.close').addEventListener('click', () => dlg.close());
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
@@ -1365,6 +1473,28 @@ fetch('/api/home').then(r => r.json()).then(d => {
   document.getElementById('heroSub').textContent =
     '소식을 불러오지 못했어요. 잠시 후 새로고침해 주세요.';
 });
+</script>
+<script type="module">
+const home = document.getElementById('home');
+home.classList.add('is3d');          // 무대 크기를 잴 수 있도록 먼저 펼쳐 둔다
+try {
+  const { initHome3D } = await import('/static/home3d.js?v=5');
+  initHome3D({
+    stage: document.getElementById('stage3d'),
+    tip: document.getElementById('stageTip'),
+    onPick: key => openPanel(key),
+    isActive: () => !home.hidden && !document.hidden && !document.querySelector('dialog[open]'),
+    topInset: () => home.querySelector('.brand').getBoundingClientRect().height,
+  });
+} catch (e) {
+  home.classList.remove('is3d');
+  console.warn('3D 홈을 켜지 못해 기본 화면으로 보여줍니다.', e);
+}
+try {
+  window.KWAK_MAP3D = (await import('/static/map3d.js?v=3')).createMap3D;
+} catch (e) {
+  console.warn('3D 지도를 불러오지 못해 평면 지도로 보여줍니다.', e);
+}
 </script>
 </body>
 </html>
