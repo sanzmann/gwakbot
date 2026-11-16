@@ -1448,20 +1448,50 @@ const panelTitle = document.getElementById('panelTitle');
 
 // 타일 → [창 제목, 내용 만드는 함수]
 const PANELS = {
-  menu:     () => ['🍚 오늘 식단', menuCard(HOME.menu, HOME.technopark)],
-  notice:   () => ['📢 최근 공지사항', noticeCard(HOME.notices)],
-  schedule: () => ['📅 다가오는 학사일정', scheduleCard(HOME.schedule)],
-  link:     () => ['🔗 자주 가는 곳', linkCard(HOME.shortcuts)],
+  menu:     ['🍚 오늘 식단', () => menuCard(HOME.menu, HOME.technopark)],
+  notice:   ['📢 최근 공지사항', () => noticeCard(HOME.notices)],
+  schedule: ['📅 다가오는 학사일정', () => scheduleCard(HOME.schedule)],
+  link:     ['🔗 자주 가는 곳', () => linkCard(HOME.shortcuts)],
 };
 
+// 홈 소식(/api/home)은 한 번만 받는다. 실패하면 다음에 누를 때 다시 받는다
+let homeLoading = null;
+function loadHome() {
+  if (HOME) return Promise.resolve(HOME);
+  homeLoading ??= fetch('/api/home')
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => {
+      HOME = d;
+      const [, m, day] = d.today.split('-');
+      document.getElementById('heroSub').textContent =
+        `${Number(m)}월 ${Number(day)}일 (${d.weekday}) · 궁금한 걸 눌러보세요`;
+      document.getElementById('stamp').textContent = d.collected_at ? `자료 수집: ${d.collected_at}` : '';
+      return d;
+    })
+    .catch(e => { homeLoading = null; throw e; });
+  return homeLoading;
+}
+
+let panelKind = null;
 function openPanel(kind) {
   if (kind === 'map') return openMapDialog(null);
   if (kind === 'hall') return openHallPanel();
   if (kind === 'bot') return showView('chat');
-  if (!HOME) return;
-  const [title, content] = PANELS[kind]();
+  const [title, make] = PANELS[kind];
+  panelKind = kind;
   panelTitle.textContent = title;
-  panelBody.replaceChildren(content);
+  if (HOME) panelBody.replaceChildren(make());
+  else {
+    // 소식이 아직 안 왔다 (느린 통신망, 막 깨어난 서버). 예전엔 여기서 아무 일도 안 일어나
+    // "눌러도 안 뜨는" 것처럼 보였다. 창부터 띄우고 도착하면 채운다
+    panelBody.replaceChildren(el('div', 'empty', '불러오는 중…'));
+    loadHome()
+      .then(() => { if (panelDlg.open && panelKind === kind) panelBody.replaceChildren(make()); })
+      .catch(() => {
+        if (panelDlg.open && panelKind === kind)
+          panelBody.replaceChildren(el('div', 'empty', '소식을 불러오지 못했어요. 잠시 후 다시 눌러 주세요.'));
+      });
+  }
   panelDlg.showModal();
 }
 
@@ -1472,22 +1502,15 @@ document.getElementById('tiles').addEventListener('click', e => {
 panelDlg.querySelector('.close').addEventListener('click', () => panelDlg.close());
 panelDlg.addEventListener('click', e => { if (e.target === panelDlg) panelDlg.close(); });
 
-fetch('/api/home').then(r => r.json()).then(d => {
-  HOME = d;
-  const [y, m, day] = d.today.split('-');
-  document.getElementById('heroSub').textContent =
-    `${Number(m)}월 ${Number(day)}일 (${d.weekday}) · 궁금한 걸 눌러보세요`;
-  document.getElementById('stamp').textContent = d.collected_at ? `자료 수집: ${d.collected_at}` : '';
-}).catch(() => {
-  document.getElementById('heroSub').textContent =
-    '소식을 불러오지 못했어요. 잠시 후 새로고침해 주세요.';
+loadHome().catch(() => {
+  document.getElementById('heroSub').textContent = '소식을 불러오지 못했어요. 메뉴를 누르면 다시 받아와요.';
 });
 </script>
 <script type="module">
 const home = document.getElementById('home');
 home.classList.add('is3d');          // 무대 크기를 잴 수 있도록 먼저 펼쳐 둔다
 try {
-  const { initHome3D } = await import('/static/home3d.js?v=11');
+  const { initHome3D } = await import('/static/home3d.js?v=12');
   initHome3D({
     stage: document.getElementById('stage3d'),
     tip: document.getElementById('stageTip'),

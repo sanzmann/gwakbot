@@ -848,13 +848,14 @@ export function initHome3D({ stage, tip, onPick, isActive, topInset }) {
 
   // ── 곽봇 ──
   const bot = buildBot();
-  world.add(bot.root);
+  const rig = new THREE.Group();          // 자리·크기는 rig 에, 회전은 bot.root 에 (몸을 돌려도 둘레의 고리는 그대로)
+  world.add(rig);
   const ACCENT = 0x4fb4ff;
   const ring = mesh(new THREE.TorusGeometry(2.55, 0.011, 8, 160), glow(ACCENT, 1.25));
   const ring2 = mesh(new THREE.TorusGeometry(2.95, 0.007, 8, 160), glow(ACCENT, 0.7));
   const moon = mesh(new THREE.SphereGeometry(0.06, 16, 12), glow(0xbfe6ff, 2.4), 2.55, 0, 0);   // 고리를 도는 작은 빛
   ring.add(moon);
-  bot.root.add(ring, ring2);
+  rig.add(bot.root, ring, ring2);
   const dot = softDot();
 
   // ── 메뉴들 ──
@@ -970,13 +971,13 @@ export function initHome3D({ stage, tip, onPick, isActive, topInset }) {
   };
   const pxPerUnit = () => H / viewH;
 
-  function pick() {
+  function pick(reach = 0.6) {
     if (!pointer.inside) return null;
     let best = null, bestD = Infinity;
     for (const it of items) {
       const [sx, sy] = toScreen(it.obj);
       const d = Math.hypot(pointer.px - sx, pointer.py - sy);
-      if (d < it.size * 0.6 * pxPerUnit() && d < bestD) { best = it.key; bestD = d; }
+      if (d < it.size * reach * pxPerUnit() && d < bestD) { best = it.key; bestD = d; }
     }
     if (best) return best;
     const [bx, by] = toScreen(bot.root);
@@ -988,15 +989,18 @@ export function initHome3D({ stage, tip, onPick, isActive, topInset }) {
   // ── 누르기·끌기 ──
   let hovered = null, drag = null, down = null;
   const grab = { dx: 0, dy: 0, x: 0, y: 0 };
+  // 곽봇은 끌면 몸이 돈다 (좌우로 빙글, 위아래로는 살짝 기울기만)
+  const turn = { on: false, yaw: 0, pitch: 0, v: 0, rest: 0, x: 0, y: 0, at: 0 };
 
   function setHover(key) {
     if (key === hovered) return;
     hovered = key;
     const it = items.find(x => x.key === key);
-    if (it && !drag) it.spinTo += TAU;          // 올리면 한 바퀴 돈다
-    tip.textContent = key === 'bot' ? '곽봇과 대화하기 💬' : (it ? it.label : '');
-    tip.classList.toggle('show', !!key && !drag);
-    stage.style.cursor = drag ? 'grabbing' : key === 'bot' ? 'pointer' : key ? 'grab' : '';
+    const held = drag || turn.on;
+    if (it && !held) it.spinTo += TAU;          // 올리면 한 바퀴 돈다
+    tip.textContent = key === 'bot' ? '누르면 대화 💬 · 끌면 돌아가요' : (it ? it.label : '');
+    tip.classList.toggle('show', !!key && !held);
+    stage.style.cursor = held ? 'grabbing' : key === 'bot' ? 'pointer' : key ? 'grab' : '';
   }
   const track = e => {
     const r = stage.getBoundingClientRect();
@@ -1007,41 +1011,77 @@ export function initHome3D({ stage, tip, onPick, isActive, topInset }) {
     pointer.inside = true;
   };
   stage.addEventListener('pointermove', e => {
+    if (down && e.pointerId !== down.id) return;      // 누르고 있는 손가락만 따라간다
     track(e);
-    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 7) down.moved = true;
+    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > down.slop) down.moved = true;
     if (drag) {
       const [wx, wy] = pointerWorld();
       grab.x = wx + grab.dx; grab.y = wy + grab.dy;
+    } else if (turn.on) {
+      const k = Math.PI / Math.max(70, bot.width * botScale * pxPerUnit());   // 몸 너비만큼 끌면 반 바퀴
+      const now = performance.now(), dx = e.clientX - turn.x, dy = e.clientY - turn.y;
+      turn.yaw += dx * k;
+      turn.pitch = clamp(turn.pitch + dy * k * 0.5, -0.5, 0.5);
+      turn.v = lerp(turn.v, dx * k / (Math.max(4, now - turn.at) / 1000), 0.45);
+      turn.x = e.clientX; turn.y = e.clientY; turn.at = now;
     } else if (e.pointerType !== 'touch') setHover(pick());
   });
   stage.addEventListener('pointerdown', e => {
     if (e.button > 0) return;
     track(e);
-    const key = pick();
+    const touch = e.pointerType === 'touch';
+    const key = pick(touch ? 0.75 : 0.6);            // 손가락은 넉넉하게 잡아 준다
     if (!key) return;
-    down = { key, x: e.clientX, y: e.clientY, moved: false };
+    // 손가락은 가만히 눌러도 조금씩 미끄러진다. 그만큼은 끌기가 아니라 누르기로 본다
+    down = { key, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, slop: touch ? 14 : 6 };
+    drag = null; turn.on = false;
     const it = items.find(x => x.key === key);
     if (it) {
       const [wx, wy] = pointerWorld();
       drag = it;
       grab.dx = it.x - wx; grab.dy = it.y - wy;
       grab.x = it.x; grab.y = it.y;
-      try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 놓쳐도 끌기는 된다 */ }
-      tip.classList.remove('show');
-      stage.style.cursor = 'grabbing';
+    } else {
+      turn.on = true; turn.v = 0;
+      turn.x = e.clientX; turn.y = e.clientY; turn.at = performance.now();
     }
+    try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 놓쳐도 끌기는 된다 */ }
+    tip.classList.remove('show');
+    stage.style.cursor = 'grabbing';
     e.preventDefault();
   });
+
+  // 손을 떼면 브라우저가 같은 자리에 click 을 한 번 더 보낸다. 그 사이에 정보 창이 떠 있으면
+  // click 이 창 바깥(배경)에 떨어져 창이 뜨자마자 닫힌다 — 모바일에서 화면 가장자리 쪽 메뉴가
+  // "눌러도 안 뜨던" 까닭. 우리가 누르기를 처리한 직후의 click 하나는 삼킨다.
+  let swallow = 0;
+  window.addEventListener('click', e => {
+    if (performance.now() > swallow) return;
+    swallow = 0;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+
   const release = e => {
-    const was = down;
-    drag = null; down = null;
+    if (down && e.pointerId !== down.id) return;
+    const was = down, tapped = was && !was.moved && e.type === 'pointerup';
+    if (turn.on) {
+      // 멈췄다가 놓았거나 그냥 눌렀다 뗀 것이면 더 돌지 않는다
+      if (tapped || performance.now() - turn.at > 90) turn.v = 0;
+      turn.v = clamp(turn.v, -24, 24);
+      turn.rest = 0;
+    }
+    drag = null; down = null; turn.on = false;
     if (e.pointerType === 'touch') { pointer.inside = false; setHover(null); }
     else { hovered = undefined; setHover(pick()); }
-    if (was && !was.moved && e.type === 'pointerup') onPick(was.key);   // 끌지 않고 뗐으면 누른 것
+    if (tapped) {
+      swallow = performance.now() + 500;
+      onPick(was.key);                               // 끌지 않고 뗐으면 누른 것
+    }
   };
   stage.addEventListener('pointerup', release);
   stage.addEventListener('pointercancel', release);
-  stage.addEventListener('pointerleave', () => { if (!drag) { pointer.inside = false; setHover(null); } });
+  stage.addEventListener('pointerleave', () => { if (!drag && !turn.on) { pointer.inside = false; setHover(null); } });
 
   // ── 물리: 원끼리 부딪히고 밀어낸다 ──
   let ouch = 0;
@@ -1135,11 +1175,28 @@ export function initHome3D({ stage, tip, onPick, isActive, topInset }) {
 
     // 시선: 마우스 쪽으로 카메라와 머리가 살짝 따라간다 (끄는 동안은 화면이 흔들리지 않게 멈춘다)
     const tx = pointer.inside ? pointer.x : 0, ty = pointer.inside ? pointer.y : 0;
-    if (!drag) { camX = lerp(camX, tx * 1.1, 0.04); camY = lerp(camY, ty * 0.6, 0.04); }
+    const held = drag || turn.on;
+    if (!held) { camX = lerp(camX, tx * 1.1, 0.04); camY = lerp(camY, ty * 0.6, 0.04); }
     camera.position.set(camX, 0.4 + camY, CAM_Z);
     camera.lookAt(0, centerY * 0.5, 0);
-    headY = lerp(headY, tx * 0.45, 0.07);
-    headX = lerp(headX, -ty * 0.24, 0.07);
+
+    // 곽봇 돌리기: 놓으면 돌던 힘으로 더 돌다가 멎고, 잠시 뒤 스르르 앞을 본다
+    if (!turn.on) {
+      turn.yaw += turn.v * dt;
+      turn.v *= Math.exp(-1.7 * dt);
+      turn.pitch = lerp(turn.pitch, 0, 1 - Math.exp(-5 * dt));
+      if (Math.abs(turn.v) < 0.4) {
+        turn.rest += dt;
+        if (turn.rest > 2.5) {
+          const front = Math.round(turn.yaw / TAU) * TAU;
+          turn.yaw = lerp(turn.yaw, front, 1 - Math.exp(-3.2 * dt));
+          if (Math.abs(turn.yaw - front) < 1e-3) turn.yaw = 0;
+        }
+      } else turn.rest = 0;
+    }
+    const facing = turn.on ? 0 : Math.max(0, Math.cos(turn.yaw));   // 등을 보일 때는 마우스를 따라 고개를 돌리지 않는다
+    headY = lerp(headY, tx * 0.45 * facing, 0.07);
+    headX = lerp(headX, -ty * 0.24 * facing, 0.07);
 
     // 우주: 별이 반짝이고 아주 천천히 돈다
     stars.material.uniforms.uTime.value = t;
@@ -1168,16 +1225,18 @@ export function initHome3D({ stage, tip, onPick, isActive, topInset }) {
     const intro = clamp(life / 0.9, 0, 1);
     botHover = lerp(botHover, hovered === 'bot' ? 1 : 0, 0.12);
     ouch = Math.max(0, ouch - dt);
-    bot.setMood(ouch > 0 ? 'ouch' : hovered === 'bot' ? 'excited' : 'happy');
+    const dizzy = Math.abs(turn.v) > 11;        // 빙글빙글 세게 돌리면 어지럽다
+    bot.setMood(ouch > 0 || dizzy ? 'ouch' : hovered === 'bot' || turn.on ? 'excited' : 'happy');
     nextWave -= dt;
     if (nextWave <= 0) { wave = 1; nextWave = 4.5 + Math.random() * 3; }
     wave = Math.max(hovered === 'bot' ? 1 : 0, wave - dt / 2.2);
     const waving = Math.min(1, wave * 3);
     const bob = Math.sin(t * 1.4) * 0.14;
     const shake = ouch > 0 ? Math.sin(ouch * 40) * 0.05 * ouch : 0;
-    bot.root.position.set(shake * botScale, bob * botScale, 0);
-    bot.root.scale.setScalar(botScale * easeOutBack(intro) * (1 + botHover * 0.05));
-    bot.root.rotation.set(Math.sin(t * 0.7) * 0.03, Math.sin(t * 0.5) * 0.22 + headY * 0.4, Math.sin(t * 0.9) * 0.035 + shake);
+    rig.position.set(shake * botScale, bob * botScale, 0);
+    rig.scale.setScalar(botScale * easeOutBack(intro) * (1 + botHover * 0.05));
+    bot.root.rotation.set(Math.sin(t * 0.7) * 0.03 + turn.pitch, Math.sin(t * 0.5) * 0.22 + headY * 0.4 + turn.yaw,
+                          Math.sin(t * 0.9) * 0.035 + shake);
     bot.head.rotation.set(headX + Math.sin(t * 1.3) * 0.02, headY, Math.sin(t * 1.1) * 0.04);
     bot.armR.rotation.z = lerp(0.5, 2.3, waving) + Math.sin(t * (7 + botHover * 3)) * 0.26 * waving + Math.sin(t * 1.5) * 0.05;
     bot.armR.rotation.x = -0.25 * waving;
@@ -1242,7 +1301,7 @@ export function initHome3D({ stage, tip, onPick, isActive, topInset }) {
     pos.needsUpdate = true;
 
     // 이름표를 가리키는 것 위에 붙인다
-    if (hovered && !drag) {
+    if (hovered && !held) {
       const it = items.find(x => x.key === hovered);
       const [sx, sy] = toScreen(it ? it.obj : bot.root);
       const lift = (it ? it.size * 0.7 : bot.height * 0.52 * botScale) * pxPerUnit();
