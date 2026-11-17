@@ -59,6 +59,15 @@ def setup() -> bool:
     try:
         with _connect() as conn, conn.cursor() as cur:
             cur.execute(SCHEMA)
+            # 2026-11-17 이전 버전은 한국 시각을 시간대 없이 넣어 UTC 로 저장됐다 (9시간 늦게 보임).
+            # id 가 작성 시각(한국 시간, YYYYMMDDHHMMSS…)이므로 그걸로 바로잡는다. 맞는 줄은 건드리지 않는다
+            cur.execute("""update menu_reviews
+                           set at = to_timestamp(left(id, 14), 'YYYYMMDDHH24MISS')::timestamp at time zone 'Asia/Seoul'
+                           where id ~ '^[0-9]{14}'
+                             and abs(extract(epoch from at - (to_timestamp(left(id, 14), 'YYYYMMDDHH24MISS')::timestamp
+                                                                at time zone 'Asia/Seoul'))) > 3600""")
+            if cur.rowcount:
+                log.info("리뷰 %d건의 작성 시각을 한국 시간으로 바로잡았습니다.", cur.rowcount)
         log.info("리뷰를 데이터베이스에 보관합니다.")
         return True
     except Exception as e:
