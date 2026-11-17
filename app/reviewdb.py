@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 import os
 
+from .clock import KST
+
 log = logging.getLogger("kwakbot.reviewdb")
 
 SCHEMA = """
@@ -25,6 +27,14 @@ create table if not exists menu_reviews (
     unique (item, client)
 );
 create index if not exists menu_reviews_item_idx on menu_reviews (item);
+-- 한줄평에 누른 '도움돼요(1)' / '별로예요(-1)'. 한 사람이 한 한줄평에 하나
+create table if not exists review_votes (
+    review_id text not null,
+    client    text not null,
+    vote      smallint not null check (vote in (-1, 1)),
+    at        timestamptz not null default now(),
+    primary key (review_id, client)
+);
 """
 
 
@@ -58,8 +68,12 @@ def setup() -> bool:
 
 
 def upsert(review: dict) -> None:
-    """같은 사람이 같은 메뉴에 다시 남기면 이전 것을 대신한다."""
+    """같은 사람이 같은 메뉴에 다시 남기면 이전 것을 대신한다.
+    다시 쓴 한줄평은 다른 글이므로 이전 글에 받은 좋아요·싫어요는 지운다."""
+    review = {**review, "at": review["at"] + "+09:00"}   # 한국 시간임을 밝혀 둔다 (DB 는 UTC)
     with _connect() as conn, conn.cursor() as cur:
+        cur.execute("""delete from review_votes where review_id in
+                       (select id from menu_reviews where item = %(item)s and client = %(client)s)""", review)
         cur.execute(
             """insert into menu_reviews (id, item, rating, comment, client, at)
                values (%(id)s, %(item)s, %(rating)s, %(comment)s, %(client)s, %(at)s)
@@ -72,7 +86,9 @@ def upsert(review: dict) -> None:
 def remove(review_id: str) -> bool:
     with _connect() as conn, conn.cursor() as cur:
         cur.execute("delete from menu_reviews where id = %s", (review_id,))
-        return cur.rowcount > 0
+        gone = cur.rowcount > 0
+        cur.execute("delete from review_votes where review_id = %s", (review_id,))
+        return gone
 
 
 def stats() -> dict[str, dict]:
@@ -82,13 +98,47 @@ def stats() -> dict[str, dict]:
                 for item, n, avg in cur.fetchall()}
 
 
-def for_item(item_id: str, limit: int = 30) -> list[dict]:
+def _kst_day(at) -> str:
+    return at.astimezone(KST).strftime("%Y-%m-%d")
+
+
+def for_item(item_id: str, client: str = "", limit: int = 30) -> list[dict]:
+    """도움이 된 순(좋아요 − 싫어요), 같으면 최신순."""
     with _connect() as conn, conn.cursor() as cur:
-        cur.execute("""select id, rating, comment, at from menu_reviews
-                       where item = %s and comment <> '' order by at desc limit %s""",
-                    (item_id, limit))
-        return [{"id": i, "rating": float(r), "comment": c, "at": at.strftime("%Y-%m-%d")}
-                for i, r, c, at in cur.fetchall()]
+        cur.execute("""select r.id, r.rating, r.comment, r.at, r.client = %(client)s,
+                              count(v.vote) filter (where v.vote = 1),
+                              count(v.vote) filter (where v.vote = -1),
+                              coalesce(max(v.vote) filter (where v.client = %(client)s), 0)
+                       from menu_reviews r left join review_votes v on v.review_id = r.id
+                       where r.item = %(item)s and r.comment <> ''
+                       group by r.id
+                       order by coalesce(sum(v.vote), 0) desc, r.at desc
+                       limit %(limit)s""",
+                    {"client": client, "item": item_id, "limit": limit})
+        return [{"id": i, "rating": float(r), "comment": c, "at": _kst_day(at), "mine": bool(me),
+                 "up": up, "down": down, "my": int(my)}
+                for i, r, c, at, me, up, down, my in cur.fetchall()]
+
+
+def vote(review_id: str, client: str, value: int) -> dict:
+    """좋아요(1)·싫어요(-1)·취소(0). 바뀐 수를 돌려준다. 남의 한줄평에만 누를 수 있다."""
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute("select client from menu_reviews where id = %s", (review_id,))
+        row = cur.fetchone()
+        if not row:
+            raise LookupError("없는 한줄평")
+        if row[0] == client:
+            raise PermissionError("내 한줄평")
+        if value:
+            cur.execute("""insert into review_votes (review_id, client, vote) values (%s, %s, %s)
+                           on conflict (review_id, client) do update set vote = excluded.vote, at = now()""",
+                        (review_id, client, value))
+        else:
+            cur.execute("delete from review_votes where review_id = %s and client = %s", (review_id, client))
+        cur.execute("""select count(*) filter (where vote = 1), count(*) filter (where vote = -1)
+                       from review_votes where review_id = %s""", (review_id,))
+        up, down = cur.fetchone()
+        return {"up": up, "down": down, "my": value}
 
 
 def mine(client: str) -> dict[str, float]:
@@ -102,7 +152,7 @@ def all_items() -> list[dict]:
         cur.execute("""select id, item, rating, comment, client, at
                        from menu_reviews order by at desc limit 500""")
         return [{"id": i, "item": it, "rating": float(r), "comment": c, "client": cl,
-                 "at": at.isoformat(timespec="seconds")}
+                 "at": at.astimezone(KST).replace(tzinfo=None).isoformat(timespec="seconds")}
                 for i, it, r, c, cl, at in cur.fetchall()]
 
 

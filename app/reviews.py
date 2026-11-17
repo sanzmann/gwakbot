@@ -23,16 +23,19 @@ from . import clock, reviewdb  # 한국 시간 기준 (서버는 UTC 로 돈다)
 
 ROOT = Path(__file__).resolve().parent.parent
 STORE = ROOT / "reviews" / "reviews.jsonl"
+VOTES = ROOT / "reviews" / "votes.json"     # {한줄평 id: {client: 1 또는 -1}}
 
 MAX_COMMENT = 80          # 한줄평이니까 짧게
 RATINGS = [round(0.5 * i, 1) for i in range(1, 11)]   # 0.5 ~ 5.0
 PER_IP_HOURLY = 20        # 같은 IP 에서 시간당 받을 리뷰 수 (공용 와이파이를 감안해 넉넉히)
+VOTES_PER_IP_HOURLY = 150  # 좋아요·싫어요는 가볍게 여러 번 누르므로 더 넉넉히
 
 # 아주 거친 금칙어 거르개. 이걸로 다 막히지는 않으므로 운영자가 지울 수 있게 해 둔다.
 BANNED = re.compile(r"시발|씨발|병신|새끼|좆|지랄|엠창|개새|썅|ㅄ|ㅅㅂ|ㅆㅂ|ㅂㅅ")
 
 _lock = threading.Lock()
 _recent: dict[str, list] = defaultdict(list)
+_recent_votes: dict[str, list] = defaultdict(list)
 
 # 서버가 뜰 때 한 번 정해진다 (app/main.py 의 lifespan 에서 setup() 을 부른다)
 _use_db = False
@@ -66,6 +69,18 @@ def _save(items: list[dict]) -> None:
     STORE.parent.mkdir(parents=True, exist_ok=True)
     body = "\n".join(json.dumps(it, ensure_ascii=False) for it in items)
     STORE.write_text(body + "\n" if body else "", encoding="utf-8", newline="\n")
+
+
+def _load_votes() -> dict[str, dict[str, int]]:
+    try:
+        return json.loads(VOTES.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_votes(votes: dict) -> None:
+    VOTES.parent.mkdir(parents=True, exist_ok=True)
+    VOTES.write_text(json.dumps(votes, ensure_ascii=False), encoding="utf-8")
 
 
 def _check_rate(ip: str) -> None:
@@ -107,10 +122,13 @@ def add(item_id: str, rating: float, comment: str, client: str, ip: str) -> dict
             reviewdb.upsert(review)
         else:
             # 같은 사람이 같은 메뉴에 남긴 기존 리뷰는 치운다
-            items = [it for it in _load()
-                     if not (it["item"] == item_id and it["client"] == client)]
+            old = [it for it in _load() if it["item"] == item_id and it["client"] == client]
+            items = [it for it in _load() if it not in old]
             items.append(review)
             _save(items)
+            votes = _load_votes()          # 다시 쓴 글은 다른 글 — 받은 좋아요·싫어요는 지운다
+            if any(votes.pop(it["id"], None) is not None for it in old):
+                _save_votes(votes)
     return review
 
 
@@ -124,6 +142,9 @@ def remove(review_id: str) -> bool:
         if len(kept) == len(items):
             return False
         _save(kept)
+        votes = _load_votes()
+        if votes.pop(review_id, None) is not None:
+            _save_votes(votes)
         return True
 
 
@@ -140,14 +161,59 @@ def stats() -> dict[str, dict]:
             for k, v in out.items()}
 
 
-def for_item(item_id: str, limit: int = 30) -> list[dict]:
-    """한 메뉴에 달린 리뷰를 최신순으로. 한줄평이 없는 건(별점만) 빼고 보여준다."""
+def for_item(item_id: str, client: str = "", limit: int = 30) -> list[dict]:
+    """한 메뉴에 달린 한줄평. 도움이 된 순(좋아요 − 싫어요), 같으면 최신순.
+    별점만 남긴 건 빼고 보여준다. client 를 주면 내 글인지·내가 누른 표시를 함께 준다."""
     if _use_db:
-        return reviewdb.for_item(item_id, limit)
-    items = [it for it in _load() if it["item"] == item_id and it["comment"]]
-    items.sort(key=lambda it: it["at"], reverse=True)
-    return [{"id": it["id"], "rating": it["rating"], "comment": it["comment"],
-             "at": it["at"][:10]} for it in items[:limit]]
+        return reviewdb.for_item(item_id, client, limit)
+    votes = _load_votes()
+    out = []
+    for it in _load():
+        if it["item"] != item_id or not it["comment"]:
+            continue
+        v = votes.get(it["id"], {})
+        out.append({"id": it["id"], "rating": it["rating"], "comment": it["comment"], "at": it["at"][:10],
+                    "mine": bool(client) and it["client"] == client,
+                    "up": sum(1 for x in v.values() if x == 1), "down": sum(1 for x in v.values() if x == -1),
+                    "my": v.get(client, 0) if client else 0, "_at": it["at"]})
+    out.sort(key=lambda r: (r["up"] - r["down"], r["_at"]), reverse=True)
+    for r in out:
+        del r["_at"]
+    return out[:limit]
+
+
+def vote(review_id: str, client: str, value: int, ip: str) -> dict:
+    """한줄평에 좋아요(1)·싫어요(-1)·취소(0). 바뀐 수 {up, down, my} 를 돌려준다."""
+    if value not in (-1, 0, 1) or not review_id or not client:
+        raise ReviewError("잘못된 요청이에요.")
+    with _lock:
+        now = clock.now()
+        recent = [t for t in _recent_votes[ip] if now - t < timedelta(hours=1)]
+        if len(recent) >= VOTES_PER_IP_HOURLY:
+            raise ReviewError("너무 많이 눌렀어요. 잠시 후 다시 시도해 주세요.")
+        recent.append(now)
+        _recent_votes[ip] = recent
+        if _use_db:
+            try:
+                return reviewdb.vote(review_id, client, value)
+            except LookupError:
+                raise ReviewError("지워진 한줄평이에요.")
+            except PermissionError:
+                raise ReviewError("내 한줄평에는 누를 수 없어요.")
+        target = next((it for it in _load() if it["id"] == review_id), None)
+        if not target:
+            raise ReviewError("지워진 한줄평이에요.")
+        if target["client"] == client:
+            raise ReviewError("내 한줄평에는 누를 수 없어요.")
+        votes = _load_votes()
+        v = votes.setdefault(review_id, {})
+        if value:
+            v[client] = value
+        else:
+            v.pop(client, None)
+        _save_votes(votes)
+        return {"up": sum(1 for x in v.values() if x == 1),
+                "down": sum(1 for x in v.values() if x == -1), "my": value}
 
 
 def mine(client: str) -> dict[str, float]:

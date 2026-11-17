@@ -101,6 +101,11 @@ class ReviewRequest(BaseModel):
     client: str = Field(min_length=8, max_length=40)
 
 
+class VoteRequest(BaseModel):
+    client: str = Field(min_length=8, max_length=40)
+    vote: int = Field(ge=-1, le=1)      # 1 도움돼요 · -1 별로예요 · 0 취소
+
+
 class ReportRequest(BaseModel):
     kind: str = Field(default="idea", max_length=20)
     message: str = Field(min_length=2, max_length=reports.MAX_MESSAGE)
@@ -137,8 +142,18 @@ async def menu_items(client: str = ""):
 
 
 @app.get("/api/menu/{item_id}/reviews")
-async def menu_reviews(item_id: str):
-    return {"reviews": reviews.for_item(item_id)}
+async def menu_reviews(item_id: str, client: str = ""):
+    """한줄평 목록 (도움이 된 순). client 를 주면 내 글인지·내가 누른 표시도 함께 준다."""
+    return {"reviews": await asyncio.to_thread(reviews.for_item, item_id, client[:40])}
+
+
+@app.post("/api/menu/review/{review_id}/vote")
+async def vote_review(review_id: str, req: VoteRequest, request: Request):
+    """남의 한줄평에 '도움돼요' / '별로예요'. 같은 걸 다시 누르면 취소(0)."""
+    try:
+        return await asyncio.to_thread(reviews.vote, review_id, req.client, req.vote, _client_ip(request))
+    except reviews.ReviewError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/menu/review")
@@ -234,9 +249,9 @@ button{{font-size:12px;padding:4px 10px;border:1px solid #cfd7e3;background:#fff
 button.primary{{background:#1f6feb;border-color:#1f6feb;color:#fff;padding:6px 14px}}
 .apply{{margin-top:10px}}
 .apply textarea{{width:100%;padding:9px 11px;border:1px solid #cfd7e3;border-radius:10px;
-  font:13.5px inherit;resize:vertical;box-sizing:border-box}}
+  font-size:13.5px;font-family:inherit;resize:vertical;box-sizing:border-box}}
 .applyrow{{display:flex;gap:8px;margin-top:6px;align-items:center}}
-.applyrow select{{flex:1;padding:6px 8px;border:1px solid #cfd7e3;border-radius:8px;font:12.5px inherit}}
+.applyrow select{{flex:1;padding:6px 8px;border:1px solid #cfd7e3;border-radius:8px;font-size:12.5px;font-family:inherit}}
 .direct{{border:1px dashed #cfd7e3;border-radius:12px;padding:12px 14px;margin-bottom:14px}}
 .saved{{background:#e7f6ec;border:1px solid #b7e3c6;color:#1c6b3a;border-radius:10px;padding:9px 12px;font-size:13px}}
 h2{{font-size:14px;color:#6b7687;margin:18px 0 6px}}
