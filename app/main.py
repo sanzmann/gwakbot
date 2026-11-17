@@ -14,7 +14,7 @@ import os
 from html import escape
 from urllib.parse import urlencode
 
-from . import admin, home, limits, providers, reports, reviews, scraper
+from . import admin, canned, home, limits, providers, reports, reviews, scraper
 from .bot import stream_reply
 
 log = logging.getLogger("kwakbot")
@@ -381,6 +381,14 @@ def _client_ip(request: Request) -> str:
 async def chat(req: ChatRequest, request: Request):
     if req.messages[-1].role != "user":
         raise HTTPException(400, "마지막 메시지는 user 여야 합니다.")
+
+    # 탄생 이야기처럼 글자 그대로 답해야 하는 물음은 AI 를 거치지 않는다 (사용량에도 안 셈)
+    fixed = canned.reply(req.messages[-1].content)
+    if fixed:
+        async def fixed_stream():
+            yield _sse({"text": fixed})
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(fixed_stream(), media_type="text/event-stream")
 
     # 공개 운영: 한 사람이 무료 한도를 다 태우지 못하게 막는다
     try:
