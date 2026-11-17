@@ -55,8 +55,9 @@ GitHub 저장소를 [Render](https://render.com) 에 연결하면, `main` 에 �
 2. Render 가입 → **New ＞ Blueprint** → 곽봇 저장소 선택 → `render.yaml` 을 읽어 설정이 채워집니다
 3. `GROQ_API_KEY` 칸에 키를 붙여넣고 (`.env` 에 있는 값) **Apply**
 4. 몇 분 뒤 주소가 나오면 접속 — 첫 접속 때 학교 홈페이지 수집이 돌아 조금 느립니다
-5. 제보함은 `https://주소/admin/reports?token=토큰` — 토큰은 Render 대시보드의
-   Environment 탭에서 자동 생성된 `ADMIN_TOKEN` 값입니다 (토큰 없이 접속하면 404)
+5. 제보함·리뷰 관리는 **채팅창에 `su -`** 를 치고 비밀번호를 넣으면 열립니다 (관리자 모드, `exit` 로 나가기).
+   비밀번호는 Render Environment 의 `ADMIN_PASSWORD` — 없으면 자동 생성된 `ADMIN_TOKEN` 값입니다.
+   예전 방식인 `https://주소/admin/reports?token=토큰` 도 그대로 됩니다
 
 ### 자료는 GitHub Actions 가 모읍니다
 웹서버는 학교 홈페이지를 긁지 않습니다. `.github/workflows/collect.yml` 이 매일 **08:00·19:00 (KST)** 에
@@ -120,7 +121,12 @@ DEVLOG.md       개발 일지
 공개되지 않고 데이터베이스(없으면 `reports/reports.jsonl`)에 저장되며, `/admin/reports` 에서 확인합니다.
 제보마다 수정칸이 있어서, 자료에 넣을 문장으로 다듬어 '자료에 추가' 를 누르면 `data/` 에 바로 반영됩니다
 (기본 파일은 `data/05_student_notes.md`, 다른 파일을 고를 수도 있음). 제보와 무관한 내용은 맨 위 '직접 추가' 칸으로.
-(공개 서버에서는 `.env` 의 `ADMIN_TOKEN` 을 설정하고 `?token=값` 으로 접속)
+(공개 서버에서는 채팅창에 `su -` → 비밀번호로 관리자 모드에 들어가 '📮 제보함' 을 누릅니다)
+
+**관리자 모드(`su -`)**: 비밀번호는 곽봇(AI)에게 보내지 않고 대화 기록에도 남기지 않습니다.
+맞으면 12시간짜리 서명 쿠키(HttpOnly·SameSite=Strict)를 받아 제보함·리뷰 관리를 엽니다.
+주소에 토큰을 붙이는 방식과 달리 방문 기록·서버 접속 기록에 비밀값이 남지 않습니다.
+같은 IP 에서 15분에 5번 틀리면 잠시 막습니다. 비밀번호를 바꾸면 모든 로그인이 풀립니다 (`app/admin.py`)
 
 ## 3D 화면
 

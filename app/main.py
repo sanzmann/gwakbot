@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -14,7 +14,7 @@ import os
 from html import escape
 from urllib.parse import urlencode
 
-from . import home, limits, providers, reports, reviews, scraper
+from . import admin, home, limits, providers, reports, reviews, scraper
 from .bot import stream_reply
 
 log = logging.getLogger("kwakbot")
@@ -165,8 +165,15 @@ async def create_report(req: ReportRequest):
     return {"ok": True}
 
 
+def _is_admin(request: Request) -> bool:
+    return admin.valid(request.cookies.get(admin.COOKIE))
+
+
 def _check_admin(request: Request) -> None:
-    """운영자 화면 보호: 토큰이 설정돼 있으면 토큰, 없으면 내 컴퓨터에서만 허용."""
+    """운영자 화면 보호: 채팅창 `su -` 로 받은 쿠키, 또는 주소의 토큰.
+    둘 다 설정이 없으면 내 컴퓨터에서만 허용."""
+    if _is_admin(request):
+        return
     token = os.getenv("ADMIN_TOKEN", "")
     if token:
         if request.query_params.get("token") != token:
@@ -316,6 +323,50 @@ async def add_knowledge(request: Request,
     except ValueError as e:
         raise HTTPException(400, str(e))
     return _back(request, path.name)
+
+
+class LoginRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+def _admin_state() -> dict:
+    s = reports.summary()
+    return {"admin": True, "todo": s["todo"], "total": s["total"]}
+
+
+@app.post("/api/admin/login")
+async def admin_login(req: LoginRequest, request: Request):
+    """채팅창에서 `su -` 다음에 넣은 비밀번호를 확인한다. 맞으면 로그인 쿠키를 준다."""
+    if not admin.enabled():
+        raise HTTPException(404, "not found")
+    try:
+        ok = admin.login(req.password, _client_ip(request))
+    except admin.TooManyTries:
+        raise HTTPException(429, "너무 많이 틀렸어요. 15분 뒤에 다시 시도하세요.")
+    if not ok:
+        log.warning("관리자 로그인 실패 (%s)", _client_ip(request))
+        raise HTTPException(401, "su: 인증 실패")
+    log.info("관리자 로그인")
+    res = JSONResponse(await asyncio.to_thread(_admin_state))
+    https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    res.set_cookie(admin.COOKIE, admin.issue(), max_age=admin.TTL, httponly=True,
+                   samesite="strict", secure=https, path="/")
+    return res
+
+
+@app.post("/api/admin/logout")
+async def admin_logout():
+    res = JSONResponse({"admin": False})
+    res.delete_cookie(admin.COOKIE, path="/")
+    return res
+
+
+@app.get("/api/admin/me")
+async def admin_me(request: Request):
+    """새로고침해도 관리자 모드를 이어 가도록, 로그인 상태와 밀린 제보 수를 알려준다."""
+    if not _is_admin(request):
+        return {"admin": False}
+    return await asyncio.to_thread(_admin_state)
 
 
 def _client_ip(request: Request) -> str:

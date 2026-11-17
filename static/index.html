@@ -75,6 +75,14 @@
   .toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 50;
     background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 9px 18px;
     font-size: 13.5px; box-shadow: var(--shadow); }
+  /* 관리자 모드 (채팅창 su -) */
+  .msg.term { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 13.5px; }
+  .adminbox { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .adminbox a, .adminbox button { font: 13px inherit; font-family: inherit; text-decoration: none; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 999px; padding: 6px 12px; }
+  .adminbox a:hover, .adminbox button:hover { border-color: var(--accent); color: var(--accent); }
+  #form.su #input { letter-spacing: .12em; }
+  #form.admin #input { border-color: #e5534b; box-shadow: 0 0 0 1px #e5534b; }   /* 관리자 모드임을 늘 보이게 */
   .error { align-self: center; color: var(--red); font-size: 13px; background: var(--panel);
     border: 1px solid var(--border); padding: 8px 14px; border-radius: 999px; }
 
@@ -1030,7 +1038,92 @@ reportSend.addEventListener('click', async () => {
   }
 });
 
-form.addEventListener('submit', e => { e.preventDefault(); send(input.value); });
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  if (!command(input.value)) send(input.value);
+});
+
+// ---- 관리자 모드: 채팅창에 `su -` → 비밀번호 ----
+// 비밀번호는 곽봇(AI)에게 가지 않는다. 대화 기록(history)에도 남기지 않고 화면에도 찍지 않는다.
+let suWait = false, isAdmin = false;
+const INPUT_HINT = input.placeholder;
+
+function sysRow(text, cls = 'term') {
+  const { msg } = addRow('bot');
+  msg.classList.add(cls);
+  msg.textContent = text;
+  return msg;
+}
+
+function setSu(on) {
+  suWait = on;
+  form.classList.toggle('su', on);
+  input.type = on ? 'password' : 'text';
+  input.placeholder = on ? 'Password (취소: Esc)' : isAdmin ? '관리자 모드 · 나가려면 exit' : INPUT_HINT;
+  input.value = '';
+  input.focus();
+}
+
+function setAdmin(on, state) {
+  isAdmin = on;
+  form.classList.toggle('admin', on);
+  if (!suWait) input.placeholder = on ? '관리자 모드 · 나가려면 exit' : INPUT_HINT;
+  if (on && state) adminPanel(state);
+}
+
+function adminPanel(state) {
+  const msg = sysRow(`# 관리자 모드 — 처리 안 한 제보 ${state.todo}건 / 전체 ${state.total}건`);
+  const box = el('div', 'adminbox');
+  const link = (href, text) => { const a = el('a', '', text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
+  const out = el('button', '', '🚪 나가기 (exit)');
+  out.type = 'button';
+  out.addEventListener('click', () => command('exit'));
+  box.append(link('/admin/reports', '📮 제보함'), link('/admin/reviews', '⭐ 식당 리뷰 관리'), out);
+  msg.append(box);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/** 채팅창 명령이면 처리하고 true. 아니면 false (평소처럼 곽봇에게 보낸다). */
+function command(raw) {
+  const text = raw.trim();
+  if (suWait) {
+    setSu(false);
+    if (!text) { sysRow('su: 취소했어요'); return true; }
+    fetch('/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: raw }),
+    }).then(async r => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || 'su: 인증 실패');
+      setAdmin(true, d);
+    }).catch(err => sysRow(err.message));
+    return true;
+  }
+  if (/^(sudo\s+)?su(\s+-)?$/i.test(text)) {
+    showView('chat');
+    welcome?.remove();
+    const { msg } = addRow('user');
+    msg.classList.add('term');
+    msg.textContent = text;
+    if (isAdmin) { input.value = ''; fetch('/api/admin/me').then(r => r.json()).then(d => d.admin ? adminPanel(d) : setAdmin(false)); return true; }
+    sysRow('Password:');
+    setSu(true);
+    return true;
+  }
+  if (isAdmin && /^(exit|logout)$/i.test(text)) {
+    input.value = '';
+    fetch('/api/admin/logout', { method: 'POST' }).finally(() => { setAdmin(false); sysRow('logout — 관리자 모드를 끝냈어요'); });
+    return true;
+  }
+  return false;
+}
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && suWait) { setSu(false); sysRow('su: 취소했어요'); }
+});
+
+// 새로고침해도 로그인이 살아 있으면 관리자 모드를 이어 간다 (패널은 su 를 다시 치면 뜬다)
+fetch('/api/admin/me').then(r => r.json()).then(d => { if (d.admin) setAdmin(true); }).catch(() => {});
 document.querySelectorAll('.chips button').forEach(b => {
   b.addEventListener('click', () => send(b.dataset.q));
 });
