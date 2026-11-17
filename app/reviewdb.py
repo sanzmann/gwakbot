@@ -39,6 +39,9 @@ def _connect():
     return psycopg.connect(url(), prepare_threshold=None, connect_timeout=10)
 
 
+connect = _connect   # 제보함(app/reports.py)도 같은 데이터베이스를 쓴다
+
+
 def setup() -> bool:
     """표를 만들어 두고 연결이 되는지 확인한다. 쓸 수 있으면 True."""
     if not url():

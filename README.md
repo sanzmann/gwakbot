@@ -76,8 +76,10 @@ GitHub 저장소를 [Render](https://render.com) 에 연결하면, `main` 에 �
   `CHAT_LIMIT_TOTAL`, `CHAT_LIMIT_PER_MIN` 으로 조절합니다 (`/health` 에서 오늘 사용량 확인).
 - **무료 플랜은 15분간 접속이 없으면 잠듭니다.** 다음 접속자가 30초~1분 기다립니다.
   (유료 플랜으로 올리거나, 그대로 두고 "처음엔 좀 느려요" 라고 안내해도 됩니다.)
-- **리뷰와 제보는 서버가 재시작되면 사라집니다** — 무료 플랜의 디스크는 임시 저장소입니다.
-  제보가 들어오면 제보함에서 바로 `data/` 에 반영하고, 그 변경을 깃에 커밋하세요.
+- **리뷰·제보는 `DATABASE_URL`(Supabase)이 있어야 남습니다** — 무료 플랜의 디스크는 임시 저장소라
+  파일로 두면 서버가 잠들었다 깨거나 다시 배포될 때 사라집니다. 제보함에서 '자료에 추가' 한 문장도
+  데이터베이스에 함께 남기고, 서버가 뜰 때 `data/` 에 다시 붙여 넣습니다. `/health` 의 `reviews`·`reports` 가
+  `database` 인지 확인하세요.
   (Render 의 유료 Persistent Disk 를 붙이면 보존됩니다.)
 - **자료 수정은 깃으로**: 공개 서버의 `data/` 에 추가한 내용도 재시작 때 사라지므로,
   내 컴퓨터에서 고쳐 푸시하는 쪽이 안전합니다.
@@ -89,7 +91,7 @@ GitHub 저장소를 [Render](https://render.com) 에 연결하면, `main` 에 �
 app/
   main.py       FastAPI 서버, /api/chat SSE 스트리밍, /api/home 홈 카드 데이터
   home.py       수집한 자료에서 홈 화면 요약 생성
-  reports.py    학생 제보 저장·조회 (reports/reports.jsonl)
+  reports.py    학생 제보 저장·조회 (데이터베이스, 없으면 reports/reports.jsonl)
   reviews.py    식당 메뉴 별점·한줄평 (reviews/reviews.jsonl)
   limits.py     공개 운영용 사용량 제한 (IP당/전체 하루 질문 수)
   clock.py      한국 시간 기준 날짜 (배포 서버는 UTC 로 돌기 때문)
@@ -115,7 +117,7 @@ DEVLOG.md       개발 일지
 
 ## 제보 받기
 학생이 답변 아래 '🚩 이 답변이 틀렸나요?' 또는 화면 맨 아래 '잘못된 정보 알려주기' 를 누르면 제보가 쌓입니다.
-공개되지 않고 `reports/reports.jsonl` 에 저장되며, http://127.0.0.1:8000/admin/reports 에서 확인합니다.
+공개되지 않고 데이터베이스(없으면 `reports/reports.jsonl`)에 저장되며, `/admin/reports` 에서 확인합니다.
 제보마다 수정칸이 있어서, 자료에 넣을 문장으로 다듬어 '자료에 추가' 를 누르면 `data/` 에 바로 반영됩니다
 (기본 파일은 `data/05_student_notes.md`, 다른 파일을 고를 수도 있음). 제보와 무관한 내용은 맨 위 '직접 추가' 칸으로.
 (공개 서버에서는 `.env` 의 `ADMIN_TOKEN` 을 설정하고 `?token=값` 으로 접속)

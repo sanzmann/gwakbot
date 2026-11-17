@@ -64,12 +64,14 @@ async def _refresh_loop():
 
 
 review_store = "?"
+report_store = "?"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global last_refresh, review_store
+    global last_refresh, review_store, report_store
     review_store = await asyncio.to_thread(reviews.setup)
+    report_store = await asyncio.to_thread(reports.setup)
     if not SCRAPE_ON_START:
         last_refresh = {"source": "github-actions", "collected_at": _collected_at()}
         log.info("자료는 저장소에 담겨온 것을 씁니다 (수집 시각 %s)", last_refresh["collected_at"])
@@ -118,7 +120,7 @@ async def index():
 @app.get("/health")
 async def health():
     return {"ok": True, "llm": providers.describe(), "last_refresh": last_refresh,
-            "usage": limits.status(), "reviews": review_store}
+            "usage": limits.status(), "reviews": review_store, "reports": report_store}
 
 
 @app.get("/api/home")
@@ -153,9 +155,12 @@ async def add_review(req: ReviewRequest, request: Request):
 async def create_report(req: ReportRequest):
     """학생 제보 접수. 공개되지 않고 운영자만 본다."""
     try:
-        item = reports.add(req.kind, req.message, req.question, req.answer)
+        item = await asyncio.to_thread(reports.add, req.kind, req.message, req.question, req.answer)
     except RuntimeError as e:
         raise HTTPException(429, str(e))
+    except Exception as e:
+        log.error("제보 저장 실패: %s", e)
+        raise HTTPException(503, "제보를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.")
     log.info("제보 접수: %s %s", item["kind"], item["message"][:40])
     return {"ok": True}
 
